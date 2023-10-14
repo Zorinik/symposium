@@ -9,11 +9,11 @@ class Summarizer extends MemoryHandler {
 	}
 
 	async handle(conversation) {
-		const model = this.agent.models.find(model => model.key === conversation.state.model);
+		const model = this.agent.models.find(model => model.name === conversation.state.model);
 		if (!model)
 			return conversation;
 
-		const encoder = encoding_for_model(model.base_model);
+		const encoder = encoding_for_model(model.name);
 		const tokens = this.countTokens(encoder, conversation);
 		if (tokens >= model.tokens * this.threshold)
 			return await this.summarize(encoder, conversation, model.tokens * this.summary_length);
