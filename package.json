@@ -1,0 +1,17 @@
+{
+  "type": "module",
+  "name": "symposium",
+  "version": "0.1.0",
+  "description": "Agents",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Domenico Giambra",
+  "license": "ISC",
+  "dependencies": {
+    "@travio/redis": "^1.3.2",
+    "openai": "^4.12.1",
+    "tiktoken": "^1.0.10"
+  }
+}
