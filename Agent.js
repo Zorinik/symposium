@@ -5,7 +5,6 @@ class Agent {
 	name = 'Agent';
 	descriptionForFront = '';
 	options = {};
-	openai;
 	conversations;
 	functions = null;
 	middlewares = new Map();
