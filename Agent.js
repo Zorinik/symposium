@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import {Symposium} from "./Symposium.js";
 import {Conversation} from "./Conversation.js";
 
 class Agent {
@@ -99,9 +99,6 @@ class Agent {
 			}
 		});
 
-		this.openai = new OpenAI({
-			apiKey: process.env.OPENAI_API_KEY,
-		});
 		this.conversations = new Map();
 	}
 
@@ -258,7 +255,8 @@ class Agent {
 					delete completion_payload.function_call;
 			}
 
-			const chatCompletion = await this.openai.chat.completions.create(completion_payload);
+			const openai = await Symposium.getOpenAi();
+			const chatCompletion = await openai.chat.completions.create(completion_payload);
 
 			let completion = chatCompletion.choices[0].message;
 			if (completion.function_call && completion.function_call.arguments)
@@ -354,17 +352,6 @@ class Agent {
 
 	async getPromptWordsForTranscription(conversation) {
 		return [this.name];
-	}
-
-	async transcribe(file, conversation) {
-		let words = await this.getPromptWordsForTranscription(conversation);
-
-		let response = await this.openai.audio.transcriptions.create({
-			file,
-			model: 'whisper-1',
-			prompt: words.join(', '),
-		});
-		return response.text;
 	}
 }
 
