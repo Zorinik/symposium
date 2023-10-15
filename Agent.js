@@ -20,19 +20,6 @@ class Agent {
 		if (this.options.memory_handler)
 			this.options.memory_handler.setAgent(this);
 
-		this.models = [
-			{
-				label: 'gpt-3.5',
-				name: 'gpt-3.5-turbo-16k',
-				tokens: 16384,
-			},
-			{
-				label: 'gpt-4',
-				name: 'gpt-4',
-				tokens: 8192
-			}
-		];
-
 		this.commands = new Map();
 
 		this.commands.set('start', {
@@ -48,15 +35,15 @@ class Agent {
 			show_in_help: true,
 			exec: async (conversation, args) => {
 				if (args) {
-					const model_to_switch = this.getModelFromLabel(args);
+					const model_to_switch = Symposium.getModelByLabel(args);
 					if (model_to_switch) {
 						await conversation.setState({model: model_to_switch.name});
 						await conversation.reply('# Da ora in poi uso ' + model_to_switch.label + '!');
 					} else {
-						await conversation.reply("# Versione modello non riconosciuta!\nModelli disponibili:\n" + this.models.map(m => m.label).join("\n"));
+						await conversation.reply("# Versione modello non riconosciuta!\nModelli disponibili:\n" + Symposium.models.map(m => m.label).join("\n"));
 					}
 				} else {
-					const currentModel = this.getModelFromName(conversation.state.model);
+					const currentModel = Symposium.getModelByName(conversation.state.model);
 					await conversation.reply('# Il modello attualmente in uso è ' + currentModel.label);
 				}
 			},
@@ -110,14 +97,6 @@ class Agent {
 		await this.resetState(conversation);
 		await this.initConversation(conversation);
 		await conversation.storeState();
-	}
-
-	getModelFromLabel(label) {
-		return this.models.find(model => model.label === label);
-	}
-
-	getModelFromName(name) {
-		return this.models.find(model => model.name === name);
 	}
 
 	async resetState(conversation) {

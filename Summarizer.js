@@ -1,3 +1,4 @@
+import {Symposium} from "./Symposium.js";
 import {MemoryHandler} from "./MemoryHandler.js";
 import {encoding_for_model} from "tiktoken";
 
@@ -9,7 +10,7 @@ class Summarizer extends MemoryHandler {
 	}
 
 	async handle(conversation) {
-		const model = this.agent.models.find(model => model.name === conversation.state.model);
+		const model = Symposium.getModelByName(conversation.state.model);
 		if (!model)
 			return conversation;
 
