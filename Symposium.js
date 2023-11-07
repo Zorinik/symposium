@@ -1,23 +1,21 @@
 import Redis from "@travio/redis";
 import OpenAI from "openai";
+import {Model} from "./Model.js";
 
 class Symposium {
 	static openai;
-	static models = [
-		{
-			label: 'gpt-3.5',
-			name: 'gpt-3.5-turbo-16k',
-			tokens: 16384,
-		},
-		{
-			label: 'gpt-4',
-			name: 'gpt-4',
-			tokens: 8192
-		}
-	];
+	static models = [];
 
 	static async init() {
+		this.loadModel(new Model('gpt-3.5-turbo-16k', 'gpt-3.5', 16384));
+		this.loadModel(new Model('gpt-4', 'gpt-4', 8192));
+		this.loadModel(new Model('gpt-4-1106-preview', 'gpt-4-turbo', 128000));
+
 		return Redis.init();
+	}
+
+	static loadModel(model) {
+		this.models.push(model);
 	}
 
 	static async getOpenAi() {
