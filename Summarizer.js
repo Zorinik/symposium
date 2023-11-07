@@ -14,7 +14,7 @@ class Summarizer extends MemoryHandler {
 		if (!model)
 			return conversation;
 
-		const encoder = encoding_for_model(model.name);
+		const encoder = encoding_for_model(model.name_for_tiktoken);
 		const tokens = this.countTokens(encoder, conversation);
 		if (tokens >= model.tokens * this.threshold)
 			return await this.summarize(encoder, conversation, model.tokens * this.summary_length);
