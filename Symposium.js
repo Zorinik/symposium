@@ -9,7 +9,7 @@ class Symposium {
 	static async init() {
 		this.loadModel(new Model('gpt-3.5-turbo-16k', 'gpt-3.5', 16384));
 		this.loadModel(new Model('gpt-4', 'gpt-4', 8192));
-		this.loadModel(new Model('gpt-4-1106-preview', 'gpt-4-turbo', 128000));
+		this.loadModel(new Model('gpt-4-1106-preview', 'gpt-4-turbo', 128000, 'gpt-4'));
 
 		return Redis.init();
 	}
