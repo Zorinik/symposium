@@ -105,7 +105,7 @@ class Agent {
 
 	async getDefaultState() {
 		return {
-			model: 'gpt-3.5-turbo-16k',
+			model: 'gpt-4-1106-preview',
 		};
 	}
 
@@ -204,7 +204,13 @@ class Agent {
 			}
 		}
 
-		const completion = await this.generateCompletion(conversation);
+		const completion_payload = {};
+		if (this.options.talking_function) {
+			completion_payload.functions = [this.options.talking_function];
+			completion_payload.function_call = {name: this.options.talking_function.name};
+		}
+
+		const completion = await this.generateCompletion(conversation, completion_payload);
 
 		await this.handleCompletion(conversation, completion);
 
@@ -266,6 +272,14 @@ class Agent {
 	}
 
 	async handleCompletion(conversation, completion) {
+		if (this.options.talking_function && completion.function_call) {
+			const text = completion.function_call.arguments[Object.keys(this.options.talking_function.parameters.properties)[0]];
+			conversation.addAssistantMessage(text);
+			await this.log('ai_message', text);
+			await conversation.reply(text);
+			return conversation.storeState()
+		}
+
 		conversation.addAssistantMessage(completion.content, completion.function_call ? {
 			...completion.function_call,
 			arguments: JSON.stringify(completion.function_call.arguments),
