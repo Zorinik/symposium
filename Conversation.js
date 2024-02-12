@@ -1,4 +1,4 @@
-import {Message} from "./Message.js";
+import Message from "./Message.js";
 import Redis from "@travio/redis";
 
 class Conversation {
@@ -84,4 +84,4 @@ class Conversation {
 	}
 }
 
-export {Conversation};
+export default Conversation;

@@ -9,4 +9,4 @@ class MemoryHandler {
 	}
 }
 
-export {MemoryHandler};
+export default MemoryHandler;

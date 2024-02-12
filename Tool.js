@@ -10,4 +10,4 @@ class Tool {
 	}
 }
 
-export {Tool};
+export default Tool;

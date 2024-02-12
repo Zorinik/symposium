@@ -14,4 +14,4 @@ class Message {
 	}
 }
 
-export {Message};
+export default Message;

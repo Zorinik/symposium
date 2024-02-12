@@ -19,4 +19,4 @@ class Middleware {
 	}
 }
 
-export {Middleware};
+export default Middleware;

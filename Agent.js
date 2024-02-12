@@ -1,5 +1,5 @@
-import {Symposium} from "./Symposium.js";
-import {Conversation} from "./Conversation.js";
+import Symposium from "./Symposium.js";
+import Conversation from "./Conversation.js";
 
 class Agent {
 	name = 'Agent';
@@ -347,4 +347,4 @@ class Agent {
 	}
 }
 
-export {Agent};
+export default Agent;

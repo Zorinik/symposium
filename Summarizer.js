@@ -1,5 +1,5 @@
-import {Symposium} from "./Symposium.js";
-import {MemoryHandler} from "./MemoryHandler.js";
+import Symposium from "./Symposium.js";
+import MemoryHandler from "./MemoryHandler.js";
 import {encoding_for_model} from "tiktoken";
 
 class Summarizer extends MemoryHandler {
@@ -93,4 +93,4 @@ class Summarizer extends MemoryHandler {
 	}
 }
 
-export {Summarizer};
+export default Summarizer;
