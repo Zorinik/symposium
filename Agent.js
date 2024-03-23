@@ -102,7 +102,7 @@ export default class Agent {
 
 	async resetState(conversation) {
 		conversation.state = await this.getDefaultState();
-		conversation.state.model = Symposium.getModelByLabel(this.default_model);
+		conversation.state.model = Symposium.getModelByLabel(this.default_model).name;
 	}
 
 	async getDefaultState() {
