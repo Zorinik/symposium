@@ -1,4 +1,4 @@
-class Message {
+export default class Message {
 	role;
 	text;
 	name;
@@ -13,5 +13,3 @@ class Message {
 		this.tags = tags;
 	}
 }
-
-export default Message;

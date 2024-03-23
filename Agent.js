@@ -1,7 +1,7 @@
 import Symposium from "./Symposium.js";
 import Conversation from "./Conversation.js";
 
-class Agent {
+export default class Agent {
 	name = 'Agent';
 	descriptionForFront = '';
 	options = {};
@@ -10,6 +10,7 @@ class Agent {
 	middlewares = new Map();
 	tools = new Map();
 	commands;
+	default_model = 'gpt-4-turbo';
 
 	constructor(options) {
 		this.options = {
@@ -101,12 +102,11 @@ class Agent {
 
 	async resetState(conversation) {
 		conversation.state = await this.getDefaultState();
+		conversation.state.model = Symposium.getModelByLabel(this.default_model);
 	}
 
 	async getDefaultState() {
-		return {
-			model: 'gpt-4-turbo-preview',
-		};
+		return {};
 	}
 
 	addTool(tool) {
@@ -346,5 +346,3 @@ class Agent {
 		return [this.name];
 	}
 }
-
-export default Agent;

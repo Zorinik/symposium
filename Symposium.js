@@ -2,7 +2,7 @@ import Redis from "@travio/redis";
 import OpenAI from "openai";
 import Model from "./Model.js";
 
-class Symposium {
+export default class Symposium {
 	static openai;
 	static models = [];
 
@@ -10,6 +10,7 @@ class Symposium {
 		this.loadModel(new Model('gpt-3.5-turbo-0125', 'gpt-3.5', 16384));
 		this.loadModel(new Model('gpt-4', 'gpt-4', 8192));
 		this.loadModel(new Model('gpt-4-turbo-preview', 'gpt-4-turbo', 128000, 'gpt-4'));
+		this.loadModel(new Model('gpt-4-vision-preview', 'gpt-4-vision', 128000, 'gpt-4'));
 
 		return Redis.init();
 	}
@@ -44,5 +45,3 @@ class Symposium {
 		return response.text;
 	}
 }
-
-export default Symposium;

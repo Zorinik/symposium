@@ -1,4 +1,4 @@
-class Middleware {
+export default class Middleware {
 	name;
 	agent;
 
@@ -18,5 +18,3 @@ class Middleware {
 		return true;
 	}
 }
-
-export default Middleware;

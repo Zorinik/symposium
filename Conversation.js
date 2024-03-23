@@ -1,7 +1,7 @@
 import Message from "./Message.js";
 import Redis from "@travio/redis";
 
-class Conversation {
+export default class Conversation {
 	id;
 	reply;
 	messages = [];
@@ -83,5 +83,3 @@ class Conversation {
 		this.messages = this.messages.filter(m => !m.tags.includes(tag));
 	}
 }
-
-export default Conversation;

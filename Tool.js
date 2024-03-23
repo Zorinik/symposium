@@ -1,4 +1,4 @@
-class Tool {
+export default class Tool {
 	name = '';
 
 	async getFunctions() {
@@ -9,5 +9,3 @@ class Tool {
 		return {error: 'callFunction is yet to be implemented'};
 	}
 }
-
-export default Tool;

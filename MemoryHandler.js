@@ -1,4 +1,4 @@
-class MemoryHandler {
+export default class MemoryHandler {
 	agent = null;
 
 	setAgent(agent) {
@@ -8,5 +8,3 @@ class MemoryHandler {
 	async handle(conversation) {
 	}
 }
-
-export default MemoryHandler;

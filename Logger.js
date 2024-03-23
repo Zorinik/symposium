@@ -1,4 +1,4 @@
-class Logger {
+export default class Logger {
 	listeners = [];
 	logs = [];
 
@@ -13,5 +13,3 @@ class Logger {
 			await listener.call(null, agent, type, payload);
 	}
 }
-
-export default Logger;

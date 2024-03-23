@@ -1,4 +1,4 @@
-class Model {
+export default class Model {
 	name;
 	name_for_tiktoken;
 	label;
@@ -11,5 +11,3 @@ class Model {
 		this.name_for_tiktoken = name_for_tiktoken || name;
 	}
 }
-
-export default Model;

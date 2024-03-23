@@ -2,11 +2,11 @@ import Symposium from "./Symposium.js";
 import MemoryHandler from "./MemoryHandler.js";
 import {encoding_for_model} from "tiktoken";
 
-class Summarizer extends MemoryHandler {
-	constructor(threshold = 0.7, summary_length = 0.4) {
+export default class Summarizer extends MemoryHandler {
+	constructor(threshold = 0.7, summary_length = 0.5) {
 		super();
-		this.threshold = 0.7;
-		this.summary_length = 0.7;
+		this.threshold = threshold;
+		this.summary_length = summary_length;
 	}
 
 	async handle(conversation) {
@@ -92,5 +92,3 @@ class Summarizer extends MemoryHandler {
 		return summarizedConversation;
 	}
 }
-
-export default Summarizer;
