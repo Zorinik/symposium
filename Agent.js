@@ -23,10 +23,6 @@ export default class Agent {
 		this.threads = new Map();
 	}
 
-	async logout(thread) {
-		thread.auth = new Map();
-	}
-
 	async reset(thread) {
 		await thread.flush();
 		await this.resetState(thread);

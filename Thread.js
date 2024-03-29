@@ -6,7 +6,6 @@ export default class Thread {
 	reply;
 	messages = [];
 	state = {};
-	auth = new Map();
 
 	constructor(id) {
 		this.id = id;
@@ -31,7 +30,6 @@ export default class Thread {
 
 		const conv = await Redis.get('thread-' + this.id);
 		if (conv) {
-			this.auth = new Map(conv.auth || []);
 			this.state = conv.state || {};
 			this.messages = conv.messages.map(m => (new Message(m.role, m.text, m.name, m.function_call, m.tags || [])));
 			return true;
@@ -48,7 +46,6 @@ export default class Thread {
 
 	async storeState() {
 		await Redis.set('thread-' + this.id, {
-			auth: [...this.auth.entries()],
 			state: this.state,
 			messages: this.messages,
 		}, 0);
