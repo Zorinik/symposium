@@ -1,7 +1,7 @@
 import Message from "./Message.js";
 import Redis from "@travio/redis";
 
-export default class Conversation {
+export default class Thread {
 	id;
 	reply;
 	messages = [];
@@ -13,12 +13,12 @@ export default class Conversation {
 	}
 
 	clone(keepMessages = true) {
-		let newConversation = new Conversation(this.id);
-		newConversation.reply = this.reply;
-		newConversation.state = this.state;
+		let newThread = new Thread(this.id);
+		newThread.reply = this.reply;
+		newThread.state = this.state;
 		if (keepMessages)
-			newConversation.messages = [...this.messages];
-		return newConversation;
+			newThread.messages = [...this.messages];
+		return newThread;
 	}
 
 	async flush() {
@@ -29,7 +29,7 @@ export default class Conversation {
 		await this.flush();
 		this.state = {};
 
-		const conv = await Redis.get('conversation-' + this.id);
+		const conv = await Redis.get('thread-' + this.id);
 		if (conv) {
 			this.auth = new Map(conv.auth || []);
 			this.state = conv.state || {};
@@ -47,7 +47,7 @@ export default class Conversation {
 	}
 
 	async storeState() {
-		await Redis.set('conversation-' + this.id, {
+		await Redis.set('thread-' + this.id, {
 			auth: [...this.auth.entries()],
 			state: this.state,
 			messages: this.messages,

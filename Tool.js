@@ -5,7 +5,7 @@ export default class Tool {
 		return [];
 	}
 
-	async callFunction(conversation, name, payload) {
+	async callFunction(thread, name, payload) {
 		return {error: 'callFunction is yet to be implemented'};
 	}
 }

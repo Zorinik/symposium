@@ -6,15 +6,15 @@ export default class Middleware {
 		this.agent = agent;
 	}
 
-	async before_add(conversation, user_message) {
+	async before_add(thread, user_message) {
 		return true;
 	}
 
-	async before_exec(conversation, user_message) {
+	async before_exec(thread, user_message) {
 		return true;
 	}
 
-	async after_exec(conversation, user_message) {
+	async after_exec(thread, user_message) {
 		return true;
 	}
 }

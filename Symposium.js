@@ -34,8 +34,8 @@ export default class Symposium {
 		return this.models.find(model => model.name === name);
 	}
 
-	static async transcribe(agent, file, conversation) {
-		let words = await agent.getPromptWordsForTranscription(conversation);
+	static async transcribe(agent, file, thread) {
+		let words = await agent.getPromptWordsForTranscription(thread);
 
 		let response = await this.openai.audio.transcriptions.create({
 			file,

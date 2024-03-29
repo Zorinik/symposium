@@ -1,11 +1,11 @@
 import Symposium from "./Symposium.js";
-import Conversation from "./Conversation.js";
+import Thread from "./Thread.js";
 
 export default class Agent {
 	name = 'Agent';
 	descriptionForFront = '';
 	options = {};
-	conversations;
+	threads;
 	functions = null;
 	middlewares = new Map();
 	tools = new Map();
@@ -26,26 +26,26 @@ export default class Agent {
 		this.commands.set('start', {
 			description: '',
 			show_in_help: false,
-			exec: async conversation => {
-				await conversation.reply('Benvenuto! Digita /help per un aiuto sui comandi, oppure procedi pure se già sai come usare.');
+			exec: async thread => {
+				await thread.reply('Benvenuto! Digita /help per un aiuto sui comandi, oppure procedi pure se già sai come usare.');
 			}
 		});
 
 		this.commands.set('model', {
 			description: 'Per impostare l\'utilizzo di GPT 3 o 4 (o vedere il modello che si sta usando)',
 			show_in_help: true,
-			exec: async (conversation, args) => {
+			exec: async (thread, args) => {
 				if (args) {
 					const model_to_switch = Symposium.getModelByLabel(args);
 					if (model_to_switch) {
-						await conversation.setState({model: model_to_switch.name});
-						await conversation.reply('# Da ora in poi uso ' + model_to_switch.label + '!');
+						await thread.setState({model: model_to_switch.name});
+						await thread.reply('# Da ora in poi uso ' + model_to_switch.label + '!');
 					} else {
-						await conversation.reply("# Versione modello non riconosciuta!\nModelli disponibili:\n" + Symposium.models.map(m => m.label).join("\n"));
+						await thread.reply("# Versione modello non riconosciuta!\nModelli disponibili:\n" + Symposium.models.map(m => m.label).join("\n"));
 					}
 				} else {
-					const currentModel = Symposium.getModelByName(conversation.state.model);
-					await conversation.reply('# Il modello attualmente in uso è ' + currentModel.label);
+					const currentModel = Symposium.getModelByName(thread.state.model);
+					await thread.reply('# Il modello attualmente in uso è ' + currentModel.label);
 				}
 			},
 		});
@@ -53,25 +53,25 @@ export default class Agent {
 		this.commands.set('reset', {
 			description: 'Reimposta la conversazione, facendo dimenticare al bot tutto ciò che viene prima',
 			show_in_help: true,
-			exec: async conversation => {
-				await this.reset(conversation);
-				await conversation.reply('# Conversazione resettata');
+			exec: async thread => {
+				await this.reset(thread);
+				await thread.reply('# Conversazione resettata');
 			}
 		});
 
 		this.commands.set('logout', {
 			description: 'Reimposta i token di autenticazione',
 			show_in_help: true,
-			exec: async conversation => {
-				await this.logout(conversation);
-				await conversation.reply('# Logout effettuato');
+			exec: async thread => {
+				await this.logout(thread);
+				await thread.reply('# Logout effettuato');
 			}
 		});
 
 		this.commands.set('help', {
 			description: 'Aiuto sui comandi',
 			show_in_help: true,
-			exec: async conversation => {
+			exec: async thread => {
 				let help = "Comandi disponibili:\n";
 				for (let command of this.commands.entries()) {
 					if (!command[1].show_in_help)
@@ -82,27 +82,27 @@ export default class Agent {
 					help += "\n";
 				}
 
-				await conversation.reply(help);
+				await thread.reply(help);
 			}
 		});
 
-		this.conversations = new Map();
+		this.threads = new Map();
 	}
 
-	async logout(conversation) {
-		conversation.auth = new Map();
+	async logout(thread) {
+		thread.auth = new Map();
 	}
 
-	async reset(conversation) {
-		await conversation.flush();
-		await this.resetState(conversation);
-		await this.initConversation(conversation);
-		await conversation.storeState();
+	async reset(thread) {
+		await thread.flush();
+		await this.resetState(thread);
+		await this.initThread(thread);
+		await thread.storeState();
 	}
 
-	async resetState(conversation) {
-		conversation.state = await this.getDefaultState();
-		conversation.state.model = Symposium.getModelByLabel(this.default_model).name;
+	async resetState(thread) {
+		thread.state = await this.getDefaultState();
+		thread.state.model = Symposium.getModelByLabel(this.default_model).name;
 	}
 
 	async getDefaultState() {
@@ -117,89 +117,89 @@ export default class Agent {
 		this.middlewares.set(middleware.name, middleware);
 	}
 
-	async initConversation(conversation) {
-		await this.doInitConversation(conversation);
-		await conversation.storeState();
+	async initThread(thread) {
+		await this.doInitThread(thread);
+		await thread.storeState();
 	}
 
-	async doInitConversation(conversation) {
+	async doInitThread(thread) {
 	}
 
-	async getConversation(id, reply = null) {
-		let conversation = this.conversations.get(id);
-		if (!conversation) {
-			conversation = new Conversation(this.name + '-' + id);
+	async getThread(id, reply = null) {
+		let thread = this.threads.get(id);
+		if (!thread) {
+			thread = new Thread(this.name + '-' + id);
 
-			if (!(await conversation.loadState())) {
-				await this.resetState(conversation);
-				await this.initConversation(conversation);
+			if (!(await thread.loadState())) {
+				await this.resetState(thread);
+				await this.initThread(thread);
 			}
 
-			this.conversations.set(id, conversation);
+			this.threads.set(id, thread);
 		}
 
 		if (reply)
-			conversation.reply = reply;
+			thread.reply = reply;
 
-		return conversation;
+		return thread;
 	}
 
-	async getConversationIfExists(id) {
-		if (this.conversations.has(id))
-			return this.conversations.get(id);
+	async getThreadIfExists(id) {
+		if (this.threads.has(id))
+			return this.threads.get(id);
 
-		const conversation = new Conversation(this.name + '-' + id);
+		const thread = new Thread(this.name + '-' + id);
 
-		if (await conversation.loadState())
-			return conversation;
+		if (await thread.loadState())
+			return thread;
 
 		return null;
 	}
 
-	async message(conversation, text) {
+	async message(thread, text) {
 		if (text.startsWith('/')) {
 			const fullCommand = text.trim().split(' ');
 			const command = fullCommand.shift().substring(1);
 			const command_args = fullCommand.length ? fullCommand.join(' ').trim() : null;
 			try {
-				await this.executeCommand(conversation, command, command_args);
+				await this.executeCommand(thread, command, command_args);
 			} catch (e) {
-				await conversation.reply(e.message || e.error || JSON.stringify(e));
+				await thread.reply(e.message || e.error || JSON.stringify(e));
 			}
 
 			return;
 		}
 
-		await this.execute(conversation, text);
+		await this.execute(thread, text);
 	}
 
-	async executeCommand(conversation, name, args) {
+	async executeCommand(thread, name, args) {
 		const command = this.commands.get(name);
 		if (!command)
 			throw new Error('Comando non riconosciuto');
 
-		await command.exec(conversation, args);
+		await command.exec(thread, args);
 	}
 
-	async execute(conversation, user_message) {
+	async execute(thread, user_message) {
 		for (let middleware of this.middlewares.values()) {
-			let proceed = await middleware.before_add(conversation, user_message);
+			let proceed = await middleware.before_add(thread, user_message);
 			if (!proceed)
 				return;
 		}
 
 		if (user_message) {
 			await this.log('user_message', user_message);
-			conversation.addUserMessage(user_message);
+			thread.addUserMessage(user_message);
 		}
 
 		if (this.options.memory_handler)
-			conversation = await this.options.memory_handler.handle(conversation);
+			thread = await this.options.memory_handler.handle(thread);
 
 		for (let middleware of this.middlewares.values()) {
-			let proceed = await middleware.before_exec(conversation, user_message);
+			let proceed = await middleware.before_exec(thread, user_message);
 			if (!proceed) {
-				await conversation.storeState();
+				await thread.storeState();
 				return;
 			}
 		}
@@ -210,25 +210,25 @@ export default class Agent {
 			completion_payload.function_call = {name: this.options.talking_function.name};
 		}
 
-		const completion = await this.generateCompletion(conversation, completion_payload);
+		const completion = await this.generateCompletion(thread, completion_payload);
 
-		await this.handleCompletion(conversation, completion);
+		await this.handleCompletion(thread, completion);
 
 		const reversedMiddlewares = [...this.middlewares.values()];
 		reversedMiddlewares.reverse();
 
 		for (let middleware of reversedMiddlewares) {
-			let proceed = await middleware.after_exec(conversation, user_message);
+			let proceed = await middleware.after_exec(thread, user_message);
 			if (!proceed)
 				return;
 		}
 	}
 
-	async generateCompletion(conversation, payload = {}, retry_counter = 1) {
+	async generateCompletion(thread, payload = {}, retry_counter = 1) {
 		try {
 			const completion_payload = {
-				model: conversation.state.model,
-				messages: conversation.getMessagesJson(),
+				model: thread.state.model,
+				messages: thread.getMessagesJson(),
 				functions: await this.getFunctions(),
 				...payload,
 			};
@@ -257,42 +257,42 @@ export default class Agent {
 						setTimeout(resolve, 1000);
 					});
 
-					return this.generateCompletion(conversation, payload, retry_counter + 1);
+					return this.generateCompletion(thread, payload, retry_counter + 1);
 				}
 
-				await conversation.reply('# Errore ' + error.response.status + ': ' + JSON.stringify(error.response.data));
+				await thread.reply('# Errore ' + error.response.status + ': ' + JSON.stringify(error.response.data));
 			} else if (error.message) {
 				console.error(error.message);
-				await conversation.reply('# Errore ' + error.message);
+				await thread.reply('# Errore ' + error.message);
 			} else {
 				console.error(error);
-				await conversation.reply('# Errore interno');
+				await thread.reply('# Errore interno');
 			}
 		}
 	}
 
-	async handleCompletion(conversation, completion) {
+	async handleCompletion(thread, completion) {
 		if (this.options.talking_function && completion.function_call) {
 			const text = completion.function_call.arguments[Object.keys(this.options.talking_function.parameters.properties)[0]];
-			conversation.addAssistantMessage(text);
+			thread.addAssistantMessage(text);
 			await this.log('ai_message', text);
-			await conversation.reply(text);
-			return conversation.storeState()
+			await thread.reply(text);
+			return thread.storeState()
 		}
 
-		conversation.addAssistantMessage(completion.content, completion.function_call ? {
+		thread.addAssistantMessage(completion.content, completion.function_call ? {
 			...completion.function_call,
 			arguments: JSON.stringify(completion.function_call.arguments),
 		} : null);
 		if (completion.content) {
 			await this.log('ai_message', completion.content);
-			await conversation.reply(completion.content);
+			await thread.reply(completion.content);
 		}
 
 		if (completion?.function_call)
-			return this.callFunction(conversation, completion.function_call);
+			return this.callFunction(thread, completion.function_call);
 		else
-			return conversation.storeState();
+			return thread.storeState();
 	}
 
 	async getFunctions(parsed = true) {
@@ -318,7 +318,7 @@ export default class Agent {
 			return this.functions;
 	}
 
-	async callFunction(conversation, function_call) {
+	async callFunction(thread, function_call) {
 		let functions = await this.getFunctions(false);
 		if (!functions.has(function_call.name))
 			throw new Error('Unrecognized function ' + function_call.name);
@@ -326,15 +326,15 @@ export default class Agent {
 		await this.log('function_call', function_call);
 
 		try {
-			const response = await functions.get(function_call.name).tool.callFunction(conversation, function_call.name, function_call.arguments);
-			conversation.addFunctionMessage(response, function_call.name);
+			const response = await functions.get(function_call.name).tool.callFunction(thread, function_call.name, function_call.arguments);
+			thread.addFunctionMessage(response, function_call.name);
 			await this.log('function_response', response);
 		} catch (error) {
-			conversation.addFunctionMessage({error}, function_call.name);
+			thread.addFunctionMessage({error}, function_call.name);
 			await this.log('function_response', {error});
 		}
 
-		await this.execute(conversation);
+		await this.execute(thread);
 	}
 
 	async log(type, payload) {
@@ -342,7 +342,7 @@ export default class Agent {
 			return this.options.logger.log(this.name, type, payload);
 	}
 
-	async getPromptWordsForTranscription(conversation) {
+	async getPromptWordsForTranscription(thread) {
 		return [this.name];
 	}
 }

@@ -9,55 +9,55 @@ export default class Summarizer extends MemoryHandler {
 		this.summary_length = summary_length;
 	}
 
-	async handle(conversation) {
-		const model = Symposium.getModelByName(conversation.state.model);
+	async handle(thread) {
+		const model = Symposium.getModelByName(thread.state.model);
 		if (!model)
-			return conversation;
+			return thread;
 
 		const encoder = encoding_for_model(model.name_for_tiktoken);
-		const tokens = this.countTokens(encoder, conversation);
+		const tokens = this.countTokens(encoder, thread);
 		if (tokens >= model.tokens * this.threshold)
-			return await this.summarize(encoder, conversation, model.tokens * this.summary_length);
+			return await this.summarize(encoder, thread, model.tokens * this.summary_length);
 		else
-			return conversation;
+			return thread;
 	}
 
-	countTokens(encoder, conversation) {
-		return encoder.encode(conversation.messages.map(m => m.text).join('')).length;
+	countTokens(encoder, thread) {
+		return encoder.encode(thread.messages.map(m => m.text).join('')).length;
 	}
 
-	async summarize(encoder, conversation, maxLength) {
-		let summaryConversation = conversation.clone(false);
+	async summarize(encoder, thread, maxLength) {
+		let summaryThread = thread.clone(false);
 
 		let currentStep = 'system';
-		for (let message of conversation.messages) {
+		for (let message of thread.messages) {
 			switch (currentStep) {
 				case 'system':
 					if (message.role !== 'system')
 						currentStep = 'summary';
 					break;
 				case 'summary':
-					if (message.role === 'user' && this.hasPassedLimit(encoder, summaryConversation, maxLength)) {
-						summaryConversation = await this.doSummarize(summaryConversation, maxLength);
+					if (message.role === 'user' && this.hasPassedLimit(encoder, summaryThread, maxLength)) {
+						summaryThread = await this.doSummarize(summaryThread, maxLength);
 						currentStep = 'retain';
 					}
 					break;
 			}
 
-			summaryConversation.messages.push(message);
+			summaryThread.messages.push(message);
 		}
 
-		return summaryConversation;
+		return summaryThread;
 	}
 
-	hasPassedLimit(encoder, conversation, maxLength) {
-		let length = this.countTokens(encoder, conversation);
+	hasPassedLimit(encoder, thread, maxLength) {
+		let length = this.countTokens(encoder, thread);
 		return length > maxLength;
 	}
 
-	async doSummarize(conversation, maxLength) {
-		conversation.addSystemMessage('Summarize the conversation up to this moment.');
-		const summary = await this.agent.generateCompletion(conversation, {
+	async doSummarize(thread, maxLength) {
+		thread.addSystemMessage('Summarize the conversation up to this moment.');
+		const summary = await this.agent.generateCompletion(thread, {
 			functions: [
 				{
 					name: 'summarize',
@@ -79,16 +79,16 @@ export default class Summarizer extends MemoryHandler {
 		if (!summary)
 			return false;
 
-		let summarizedConversation = conversation.clone(false);
-		for (let message of conversation.messages) {
+		let summarizedThread = thread.clone(false);
+		for (let message of thread.messages) {
 			if (message.role === 'system' && !message.tags.includes('summary')) {
-				summarizedConversation.messages.push(message);
+				summarizedThread.messages.push(message);
 			} else {
-				summarizedConversation.addSystemMessage("This is what happened until now:\n" + summary.function_call.arguments.summary, ['summary']);
+				summarizedThread.addSystemMessage("This is what happened until now:\n" + summary.function_call.arguments.summary, ['summary']);
 				break;
 			}
 		}
 
-		return summarizedConversation;
+		return summarizedThread;
 	}
 }

@@ -5,6 +5,6 @@ export default class MemoryHandler {
 		this.agent = agent;
 	}
 
-	async handle(conversation) {
+	async handle(thread) {
 	}
 }
