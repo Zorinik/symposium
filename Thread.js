@@ -3,16 +3,18 @@ import Redis from "@travio/redis";
 
 export default class Thread {
 	id;
+	agent;
 	reply;
 	messages = [];
 	state = {};
 
-	constructor(id) {
+	constructor(id, agent) {
 		this.id = id;
+		this.agent = agent;
 	}
 
 	clone(keepMessages = true) {
-		let newThread = new Thread(this.id);
+		let newThread = new Thread(this.id, this.agent);
 		newThread.reply = this.reply;
 		newThread.state = this.state;
 		if (keepMessages)

@@ -58,7 +58,7 @@ export default class Agent {
 	async getThread(id, reply = null) {
 		let thread = this.threads.get(id);
 		if (!thread) {
-			thread = new Thread(this.name + '-' + id);
+			thread = new Thread(this.name + '-' + id, this);
 
 			if (!(await thread.loadState())) {
 				await this.resetState(thread);
@@ -78,7 +78,7 @@ export default class Agent {
 		if (this.threads.has(id))
 			return this.threads.get(id);
 
-		const thread = new Thread(this.name + '-' + id);
+		const thread = new Thread(this.name + '-' + id, this);
 
 		if (await thread.loadState())
 			return thread;
