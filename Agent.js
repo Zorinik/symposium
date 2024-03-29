@@ -9,7 +9,6 @@ export default class Agent {
 	functions = null;
 	middlewares = new Map();
 	tools = new Map();
-	commands;
 	default_model = 'gpt-4-turbo';
 
 	constructor(options) {
@@ -20,71 +19,6 @@ export default class Agent {
 
 		if (this.options.memory_handler)
 			this.options.memory_handler.setAgent(this);
-
-		this.commands = new Map();
-
-		this.commands.set('start', {
-			description: '',
-			show_in_help: false,
-			exec: async thread => {
-				await thread.reply('Benvenuto! Digita /help per un aiuto sui comandi, oppure procedi pure se già sai come usare.');
-			}
-		});
-
-		this.commands.set('model', {
-			description: 'Per impostare l\'utilizzo di GPT 3 o 4 (o vedere il modello che si sta usando)',
-			show_in_help: true,
-			exec: async (thread, args) => {
-				if (args) {
-					const model_to_switch = Symposium.getModelByLabel(args);
-					if (model_to_switch) {
-						await thread.setState({model: model_to_switch.name});
-						await thread.reply('# Da ora in poi uso ' + model_to_switch.label + '!');
-					} else {
-						await thread.reply("# Versione modello non riconosciuta!\nModelli disponibili:\n" + Symposium.models.map(m => m.label).join("\n"));
-					}
-				} else {
-					const currentModel = Symposium.getModelByName(thread.state.model);
-					await thread.reply('# Il modello attualmente in uso è ' + currentModel.label);
-				}
-			},
-		});
-
-		this.commands.set('reset', {
-			description: 'Reimposta la conversazione, facendo dimenticare al bot tutto ciò che viene prima',
-			show_in_help: true,
-			exec: async thread => {
-				await this.reset(thread);
-				await thread.reply('# Conversazione resettata');
-			}
-		});
-
-		this.commands.set('logout', {
-			description: 'Reimposta i token di autenticazione',
-			show_in_help: true,
-			exec: async thread => {
-				await this.logout(thread);
-				await thread.reply('# Logout effettuato');
-			}
-		});
-
-		this.commands.set('help', {
-			description: 'Aiuto sui comandi',
-			show_in_help: true,
-			exec: async thread => {
-				let help = "Comandi disponibili:\n";
-				for (let command of this.commands.entries()) {
-					if (!command[1].show_in_help)
-						continue;
-					help += '/' + command[0];
-					if (command[1].description)
-						help += ' -> ' + command[1].description;
-					help += "\n";
-				}
-
-				await thread.reply(help);
-			}
-		});
 
 		this.threads = new Map();
 	}
@@ -157,47 +91,18 @@ export default class Agent {
 	}
 
 	async message(thread, text) {
-		if (text.startsWith('/')) {
-			const fullCommand = text.trim().split(' ');
-			const command = fullCommand.shift().substring(1);
-			const command_args = fullCommand.length ? fullCommand.join(' ').trim() : null;
-			try {
-				await this.executeCommand(thread, command, command_args);
-			} catch (e) {
-				await thread.reply(e.message || e.error || JSON.stringify(e));
-			}
-
-			return;
-		}
+		await this.log('user_message', text);
+		thread.addUserMessage(text);
 
 		await this.execute(thread, text);
 	}
 
-	async executeCommand(thread, name, args) {
-		const command = this.commands.get(name);
-		if (!command)
-			throw new Error('Comando non riconosciuto');
-
-		await command.exec(thread, args);
-	}
-
-	async execute(thread, user_message) {
-		for (let middleware of this.middlewares.values()) {
-			let proceed = await middleware.before_add(thread, user_message);
-			if (!proceed)
-				return;
-		}
-
-		if (user_message) {
-			await this.log('user_message', user_message);
-			thread.addUserMessage(user_message);
-		}
-
+	async execute(thread) {
 		if (this.options.memory_handler)
 			thread = await this.options.memory_handler.handle(thread);
 
 		for (let middleware of this.middlewares.values()) {
-			let proceed = await middleware.before_exec(thread, user_message);
+			let proceed = await middleware.before_exec(thread);
 			if (!proceed) {
 				await thread.storeState();
 				return;
@@ -218,7 +123,7 @@ export default class Agent {
 		reversedMiddlewares.reverse();
 
 		for (let middleware of reversedMiddlewares) {
-			let proceed = await middleware.after_exec(thread, user_message);
+			let proceed = await middleware.after_exec(thread);
 			if (!proceed)
 				return;
 		}
