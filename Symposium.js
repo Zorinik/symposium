@@ -35,13 +35,13 @@ export default class Symposium {
 	}
 
 	static async transcribe(agent, file, thread) {
-		let words = await agent.getPromptWordsForTranscription(thread);
+		const words = await agent.getPromptWordsForTranscription(thread);
 
-		let response = await this.openai.audio.transcriptions.create({
+		const response = await this.getOpenAi().then(openai => openai.audio.transcriptions.create({
 			file,
 			model: 'whisper-1',
 			prompt: words.join(', '),
-		});
+		}));
 		return response.text;
 	}
 }
