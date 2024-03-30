@@ -5,7 +5,7 @@ import Message from "../Message.js";
 
 export default class AnthropicModel extends Model {
 	anthropic;
-	supports_tools = false;
+	supports_functions = false;
 
 	getAnthropic() {
 		if (!this.anthropic)
@@ -15,7 +15,14 @@ export default class AnthropicModel extends Model {
 	}
 
 	async generate(thread, payload = {}, functions = []) {
-		const [system, messages] = this.convertMessages(thread);
+		let [system, messages] = this.convertMessages(thread);
+
+		if (functions.length && !this.supports_functions) {
+			// Se il modello non supporta nativamente le funzioni, aggiungo il prompt al messaggio di sistema
+			const functions_prompt = this.promptFromFunctions(functions);
+			system += functions_prompt;
+			functions = [];
+		}
 
 		const completion_payload = {
 			model: this.name,

@@ -5,5 +5,5 @@ export default class Gpt4Vision extends OpenAIModel {
 	label = 'gpt-4-vision';
 	name_for_tiktoken = 'gpt-4';
 	tokens = 128000;
-	supports_tools = false;
+	supports_functions = false;
 }

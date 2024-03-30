@@ -123,7 +123,7 @@ export default class Agent {
 	async generateCompletion(thread, payload = {}, retry_counter = 1) {
 		try {
 			const model = Symposium.getModelByName(thread.state.model);
-			return model.generate(thread, payload, await this.getFunctions())
+			return model.generate(thread, payload, await this.getFunctions());
 		} catch (error) {
 			if (error.response) {
 				console.error(error.response.status);
