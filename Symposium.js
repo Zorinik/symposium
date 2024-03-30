@@ -1,40 +1,35 @@
 import Redis from "@travio/redis";
 import OpenAI from "openai";
-import Model from "./Model.js";
+import Gpt35 from "./models/Gpt35.js";
+import Gpt4 from "./models/Gpt4.js";
+import Gpt4Turbo from "./models/Gpt4Turbo.js";
+import Gpt4Vision from "./models/Gpt4Vision.js";
 
 export default class Symposium {
-	static openai;
-	static models = [];
+	static models = new Map();
 
 	static async init() {
-		this.loadModel(new Model('gpt-3.5-turbo-0125', 'gpt-3.5', 16384));
-		this.loadModel(new Model('gpt-4', 'gpt-4', 8192));
-		this.loadModel(new Model('gpt-4-turbo-preview', 'gpt-4-turbo', 128000, 'gpt-4'));
-		this.loadModel(new Model('gpt-4-vision-preview', 'gpt-4-vision', 128000, 'gpt-4'));
+		this.loadModel(new Gpt35());
+		this.loadModel(new Gpt4());
+		this.loadModel(new Gpt4Turbo());
+		this.loadModel(new Gpt4Vision());
 
 		return Redis.init();
 	}
 
 	static loadModel(model) {
-		this.models.push(model);
-	}
-
-	static async getOpenAi() {
-		if (!this.openai)
-			this.openai = new OpenAI({apiKey: process.env.OPENAI_API_KEY});
-
-		return this.openai;
-	}
-
-	static getModelByLabel(label) {
-		return this.models.find(model => model.label === label);
+		this.models.set(model.name, model);
 	}
 
 	static getModelByName(name) {
-		return this.models.find(model => model.name === name);
+		return this.models.get(name);
 	}
 
-	static async transcribe(agent, file, thread) {
+	static getModelByLabel(label) {
+		return Array.from(this.models.values()).find(model => model.label === label);
+	}
+
+	/*static async transcribe(agent, file, thread) {
 		const words = await agent.getPromptWordsForTranscription(thread);
 
 		const response = await this.getOpenAi().then(openai => openai.audio.transcriptions.create({
@@ -43,5 +38,5 @@ export default class Symposium {
 			prompt: words.join(', '),
 		}));
 		return response.text;
-	}
+	}*/
 }

@@ -105,13 +105,7 @@ export default class Agent {
 			}
 		}
 
-		const completion_payload = {};
-		if (this.options.talking_function) {
-			completion_payload.functions = [this.options.talking_function];
-			completion_payload.function_call = {name: this.options.talking_function.name};
-		}
-
-		const completion = await this.generateCompletion(thread, completion_payload);
+		const completion = await this.generateCompletion(thread);
 
 		await this.handleCompletion(thread, completion);
 
@@ -127,27 +121,8 @@ export default class Agent {
 
 	async generateCompletion(thread, payload = {}, retry_counter = 1) {
 		try {
-			const completion_payload = {
-				model: thread.state.model,
-				messages: thread.getMessagesJson(),
-				functions: await this.getFunctions(),
-				...payload,
-			};
-
-			if (!completion_payload.functions?.length) {
-				delete completion_payload.functions;
-				if (completion_payload.hasOwnProperty('function_call'))
-					delete completion_payload.function_call;
-			}
-
-			const openai = await Symposium.getOpenAi();
-			const chatCompletion = await openai.chat.completions.create(completion_payload);
-
-			let completion = chatCompletion.choices[0].message;
-			if (completion.function_call && completion.function_call.arguments)
-				completion.function_call.arguments = JSON.parse(completion.function_call.arguments);
-
-			return completion;
+			const model = Symposium.getModelByName(thread.state.model);
+			return model.generate(thread, payload, await this.getFunctions())
 		} catch (error) {
 			if (error.response) {
 				console.error(error.response.status);
@@ -173,18 +148,11 @@ export default class Agent {
 	}
 
 	async handleCompletion(thread, completion) {
-		if (this.options.talking_function && completion.function_call) {
-			const text = completion.function_call.arguments[Object.keys(this.options.talking_function.parameters.properties)[0]];
-			thread.addAssistantMessage(text);
-			await this.log('ai_message', text);
-			await thread.reply(text);
-			return thread.storeState()
-		}
-
 		thread.addAssistantMessage(completion.content, completion.function_call ? {
 			...completion.function_call,
 			arguments: JSON.stringify(completion.function_call.arguments),
 		} : null);
+
 		if (completion.content) {
 			await this.log('ai_message', completion.content);
 			await thread.reply(completion.content);
