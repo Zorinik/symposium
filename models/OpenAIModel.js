@@ -1,5 +1,7 @@
+import Response from "../Response.js";
 import Model from "../Model.js";
 import OpenAI from "openai";
+import Message from "../Message.js";
 
 export default class OpenAIModel extends Model {
 	openai;
@@ -28,10 +30,18 @@ export default class OpenAIModel extends Model {
 
 		const chatCompletion = await this.getOpenAi().chat.completions.create(completion_payload);
 
+		const response = new Response;
 		const completion = chatCompletion.choices[0].message;
-		if (completion.function_call && completion.function_call.arguments)
-			completion.function_call.arguments = JSON.parse(completion.function_call.arguments);
+		if (completion.content)
+			response.messages.push(new Message('assistant', completion.content));
 
-		return completion;
+		if (completion.function_call && completion.function_call.arguments) {
+			response.function = {
+				name: completion.function_call.name,
+				args: JSON.parse(completion.function_call.arguments),
+			};
+		}
+
+		return response;
 	}
 }

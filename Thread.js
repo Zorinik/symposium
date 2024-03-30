@@ -62,6 +62,10 @@ export default class Thread {
 		}));
 	}
 
+	addMessage(message) {
+		this.messages.push(message);
+	}
+
 	addSystemMessage(text, tags = []) {
 		this.messages.push(new Message('system', text, null, null, tags));
 	}

@@ -107,7 +107,8 @@ export default class Agent {
 
 		const completion = await this.generateCompletion(thread);
 
-		await this.handleCompletion(thread, completion);
+		if (completion)
+			await this.handleCompletion(thread, completion);
 
 		const reversedMiddlewares = [...this.middlewares.values()];
 		reversedMiddlewares.reverse();
@@ -148,18 +149,21 @@ export default class Agent {
 	}
 
 	async handleCompletion(thread, completion) {
-		thread.addAssistantMessage(completion.content, completion.function_call ? {
-			...completion.function_call,
-			arguments: JSON.stringify(completion.function_call.arguments),
-		} : null);
-
-		if (completion.content) {
-			await this.log('ai_message', completion.content);
-			await thread.reply(completion.content);
+		for (let message of completion.messages) {
+			thread.addMessage(message);
+			await this.log('ai_message', message.text);
+			await thread.reply(message.text);
 		}
 
-		if (completion?.function_call)
-			return this.callFunction(thread, completion.function_call);
+		if (completion.function) {
+			thread.addAssistantMessage('', {
+				name: completion.function.name,
+				arguments: JSON.stringify(completion.function_call.args),
+			});
+		}
+
+		if (completion.function)
+			return this.callFunction(thread, completion.function);
 		else
 			return thread.storeState();
 	}
@@ -195,7 +199,7 @@ export default class Agent {
 		await this.log('function_call', function_call);
 
 		try {
-			const response = await functions.get(function_call.name).tool.callFunction(thread, function_call.name, function_call.arguments);
+			const response = await functions.get(function_call.name).tool.callFunction(thread, function_call.name, function_call.args);
 			thread.addFunctionMessage(response, function_call.name);
 			await this.log('function_response', response);
 		} catch (error) {

@@ -14,7 +14,6 @@ export {
 	Symposium,
 	Agent,
 	Thread,
-	Message,
 	Tool,
 	Logger,
 	MemoryHandler,
