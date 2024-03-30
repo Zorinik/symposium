@@ -19,12 +19,14 @@ export default class Model {
 
 	promptFromFunctions(functions) {
 		if (!functions.length)
-			return null;
+			return '';
 
-		let message = "Hai a disposizione le seguenti funzioni, per chiamare una funzione scrivi un messaggio che inizia con CALL nome_funzione e a capo inserisci il JSON con gli argomenti, ad esempio:\n" +
+		let message = "Hai a disposizione alcune funzioni che puoi chiamare per ottenere risposte o compiere azioni. Per chiamare una funzione scrivi un messaggio che inizia con CALL nome_funzione e a capo inserisci il JSON con gli argomenti; delimitando il tutto da 3 caratteri ``` - ad esempio:\n" +
+			"```\n" +
 			"CALL create_user\n" +
-			'{"name":"test"}' + "\n\n" +
-			"Lista funzioni:\n";
+			'{"name":"test"}' + "\n" +
+			"```\n\n" +
+			"Lista delle funzioni che hai a disposizione:\n";
 
 		for (let f of functions)
 			message += '- ' + f.name + "\n " + f.description + "\n";
