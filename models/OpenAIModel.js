@@ -3,7 +3,6 @@ import OpenAI from "openai";
 
 export default class OpenAIModel extends Model {
 	openai;
-	vendor = 'openai';
 	supports_tools = true;
 
 	getOpenAi() {

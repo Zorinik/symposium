@@ -206,6 +206,14 @@ export default class Agent {
 		await this.execute(thread);
 	}
 
+	async setModel(thread, label) {
+		const model_to_switch = Symposium.getModelByLabel(label);
+		if (model_to_switch && model_to_switch.type === 'llm')
+			await thread.setState({model: model_to_switch.name});
+		else
+			throw new Error("Versione modello non riconosciuta!\nModelli disponibili:\n" + Array.from(Symposium.models.values()).filter(m => m.type === 'llm').map(m => m.label).join("\n"));
+	}
+
 	async log(type, payload) {
 		if (this.options.logger)
 			return this.options.logger.log(this.name, type, payload);

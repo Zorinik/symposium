@@ -1,5 +1,5 @@
 export default class Model {
-	vendor;
+	type = 'llm';
 	name;
 	name_for_tiktoken;
 	label;
@@ -7,6 +7,8 @@ export default class Model {
 	supports_tools = false;
 
 	constructor() {
+		if (!this.label)
+			this.label = this.name;
 		if (!this.name_for_tiktoken)
 			this.name_for_tiktoken = this.name;
 	}
