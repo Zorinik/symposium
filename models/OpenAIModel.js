@@ -59,8 +59,15 @@ export default class OpenAIModel extends Model {
 		const message_content = [];
 		if (completion.content)
 			message_content.push({type: 'text', content: completion.content});
-		if (completion.function_call && completion.function_call.arguments)
-			message_content.push({type: 'function', content: completion.function_call});
+		if (completion.function_call) {
+			message_content.push({
+				type: 'function',
+				content: {
+					name: completion.function_call.name,
+					arguments: completion.function_call.arguments ? JSON.parse(completion.function_call.arguments) : {},
+				},
+			});
+		}
 
 		return [
 			new Message('assistant', message_content),
@@ -83,14 +90,16 @@ export default class OpenAIModel extends Model {
 					if (this.supports_functions) {
 						messages.push({
 							role: message.role,
-							content: null,
 							name: message.name,
-							function_call: c.content,
+							function_call: {
+								name: c.content.name,
+								arguments: c.content.arguments ? JSON.stringify(c.content.arguments) : '{}',
+							},
 						});
 					} else {
 						messages.push({
 							role: message.role,
-							content: c.content,
+							content: '```CALL \n' + c.content.name + '\n' + JSON.stringify(c.content.arguments || {}) + '\n```',
 							name: message.name,
 						});
 					}
