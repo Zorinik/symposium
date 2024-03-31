@@ -153,14 +153,18 @@ export default class Agent {
 	parseFunctions(message) {
 		const newContent = [];
 		for (let m of message.content) {
-			if (m.type === 'text' && m.content.match(/```\nCALL [A-Za-z0-9_]+\n(\{.+\}\n)?```/)) {
+			if (m.type === 'text' && m.content.match(/```\nCALL [A-Za-z0-9_]+\n[\s\S]*```/)) {
 				const splitted = m.content.split('```');
 				for (let text of splitted) {
+					text = text.trim();
+					if (!text)
+						continue;
+
 					const match = text.match(/^CALL ([A-Za-z0-9_]+)\n([\s\S]*)$/);
 					if (match)
-						m.push({type: 'function', content: {name: match[1], arguments: JSON.parse(match[2] || '{}')}});
+						newContent.push({type: 'function', content: {name: match[1], arguments: JSON.parse(match[2] || '{}')}});
 					else
-						m.push({type: 'text', content: text.trim()});
+						newContent.push({type: 'text', content: text});
 				}
 			} else {
 				newContent.push(m);

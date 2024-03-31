@@ -56,16 +56,16 @@ export default class AnthropicModel extends Model {
 		let system = [], messages = [];
 		for (let message of thread.messages) {
 			if (message.role === 'system') {
-				system.push(message.content);
+				system.push(message.content.map(c => c.content).join("\n"));
 			} else {
 				messages.push({
-					role: message.role,
+					role: message.role === 'function' ? 'user' : message.role,
 					content: message.content.map(c => {
 						switch (c.type) {
 							case 'text':
 								return {
 									type: 'text',
-									text: c.content,
+									text: (message.role === 'function' ? 'FUNCTION RESPONSE: ' : '') + c.content,
 								};
 
 							case 'function':

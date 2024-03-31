@@ -23,7 +23,7 @@ export default class Model {
 		if (!functions.length)
 			return '';
 
-		let message = "Hai a disposizione alcune funzioni che puoi chiamare per ottenere risposte o compiere azioni. Per chiamare una funzione scrivi un messaggio che inizia con CALL nome_funzione e a capo inserisci il JSON con gli argomenti; delimitando il tutto da 3 caratteri ``` - ad esempio:\n" +
+		let message = "Hai a disposizione alcune funzioni che puoi chiamare per ottenere risposte o compiere azioni. Ricorda che devi attendere la risposta dalla funzione per sapere se ha avuto successo. Per chiamare una funzione scrivi un messaggio che inizia con CALL nome_funzione e a capo inserisci il JSON con gli argomenti; delimitando il tutto da 3 caratteri ``` - ad esempio:\n" +
 			"```\n" +
 			"CALL create_user\n" +
 			'{"name":"test"}' + "\n" +
