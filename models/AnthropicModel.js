@@ -1,6 +1,5 @@
 import Model from "../Model.js";
 import Anthropic from '@anthropic-ai/sdk';
-import Response from "../Response.js";
 import Message from "../Message.js";
 
 export default class AnthropicModel extends Model {
@@ -34,23 +33,53 @@ export default class AnthropicModel extends Model {
 
 		const message = await this.getAnthropic().messages.create(completion_payload);
 
-		const response = new Response;
+		const message_content = [];
 		if (message.content) {
-			for (let m of message.content)
-				// TODO: supporto ad altri tipi oltre a text (m.type)
-				response.messages.push(new Message('assistant', m.text));
+			for (let m of message.content) {
+				switch (m.type) {
+					case 'text':
+						message_content.push({type: 'text', content: m.text});
+						break;
+
+					default:
+						throw new Error('Unrecognized message type in Anthropic response');
+				}
+			}
 		}
 
-		return response;
+		return [
+			new Message('assistant', message_content),
+		];
 	}
 
 	convertMessages(thread) {
 		let system = [], messages = [];
-		for (let message of thread.getMessagesJson()) {
-			if (message.role === 'system')
+		for (let message of thread.messages) {
+			if (message.role === 'system') {
 				system.push(message.content);
-			else
-				messages.push(message);
+			} else {
+				messages.push({
+					role: message.role,
+					content: message.content.map(c => {
+						switch (c.type) {
+							case 'text':
+								return {
+									type: 'text',
+									text: c.content,
+								};
+
+							case 'function':
+								return {
+									type: 'text',
+									text: '```CALL \n' + c.content.name + '\n' + JSON.stringify(c.content.arguments || {}) + '\n```',
+								};
+
+							default:
+								throw new Error('Message type "' + c.type + '" unsupported by this model');
+						}
+					}),
+				});
+			}
 		}
 
 		return [system.length ? system.join("\n") : undefined, messages];

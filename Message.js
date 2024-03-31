@@ -1,15 +1,25 @@
 export default class Message {
 	role;
-	text;
-	name;
-	function_call;
+	content = [];
+	name = undefined;
 	tags = [];
 
-	constructor(role, text, name = null, function_call = null, tags = []) {
+	constructor(role, content = [], name = undefined, tags = []) {
 		this.role = role;
-		this.text = text;
 		this.name = name;
-		this.function_call = function_call;
 		this.tags = tags;
+
+		if (typeof content === 'string') {
+			this.content = [
+				{
+					type: 'text',
+					content,
+				},
+			];
+		} else if (typeof content === 'object') {
+			this.content = Array.isArray(content) ? content : [content];
+		} else {
+			throw new Error('Unrecognized message type');
+		}
 	}
 }

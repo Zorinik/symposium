@@ -1,3 +1,5 @@
+import Message from "./Message.js";
+
 export default class Model {
 	type = 'llm';
 	name;

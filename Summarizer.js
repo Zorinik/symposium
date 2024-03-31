@@ -56,7 +56,7 @@ export default class Summarizer extends MemoryHandler {
 	}
 
 	async doSummarize(thread, maxLength) {
-		thread.addSystemMessage('Summarize the conversation up to this moment.');
+		thread.addMessage('system', 'Summarize the conversation up to this moment.');
 		const summary = await this.agent.generateCompletion(thread, {
 			functions: [
 				{
@@ -79,12 +79,13 @@ export default class Summarizer extends MemoryHandler {
 		if (!summary)
 			return false;
 
+		// TODO: sistemare con nuova interfaccia
 		let summarizedThread = thread.clone(false);
 		for (let message of thread.messages) {
 			if (message.role === 'system' && !message.tags.includes('summary')) {
 				summarizedThread.messages.push(message);
 			} else {
-				summarizedThread.addSystemMessage("This is what happened until now:\n" + summary.function_call.arguments.summary, ['summary']);
+				summarizedThread.addMessage('system', "This is what happened until now:\n" + summary.function_call.arguments.summary, ['summary']);
 				break;
 			}
 		}

@@ -1,4 +1,3 @@
-import Response from "../Response.js";
 import Model from "../Model.js";
 import OpenAI from "openai";
 import Message from "../Message.js";
@@ -15,7 +14,7 @@ export default class OpenAIModel extends Model {
 	}
 
 	async generate(thread, payload = {}, functions = []) {
-		let messages = thread.getMessagesJson();
+		let messages = thread.messages;
 
 		if (functions.length && !this.supports_functions) {
 			// Se il modello non supporta nativamente le funzioni, inserisco il prompt ad hoc come ultimo messaggio di sistema
@@ -31,15 +30,19 @@ export default class OpenAIModel extends Model {
 					other_messages.push(message);
 			}
 
-			system_messages.push({role: 'system', content: functions_prompt});
+			system_messages.push(new Message('system', functions_prompt));
 
 			messages = [...system_messages, ...other_messages];
 			functions = [];
 		}
 
+		const convertedMessages = [];
+		for (let m of messages)
+			convertedMessages.push(...this.convertMessage(m));
+
 		const completion_payload = {
 			model: this.name,
-			messages,
+			messages: convertedMessages,
 			functions,
 			...payload,
 		};
@@ -51,19 +54,53 @@ export default class OpenAIModel extends Model {
 		}
 
 		const chatCompletion = await this.getOpenAi().chat.completions.create(completion_payload);
-
-		const response = new Response;
 		const completion = chatCompletion.choices[0].message;
-		if (completion.content)
-			response.messages.push(new Message('assistant', completion.content));
 
-		if (completion.function_call && completion.function_call.arguments) {
-			response.function = {
-				name: completion.function_call.name,
-				args: JSON.parse(completion.function_call.arguments),
-			};
+		const message_content = [];
+		if (completion.content)
+			message_content.push({type: 'text', content: completion.content});
+		if (completion.function_call && completion.function_call.arguments)
+			message_content.push({type: 'function', content: completion.function_call});
+
+		return [
+			new Message('assistant', message_content),
+		];
+	}
+
+	convertMessage(message) {
+		const messages = [];
+		for (let c of message.content) {
+			switch (c.type) {
+				case 'text':
+					messages.push({
+						role: message.role,
+						content: c.content,
+						name: message.name,
+					});
+					break;
+
+				case 'function':
+					if (this.supports_functions) {
+						messages.push({
+							role: message.role,
+							content: null,
+							name: message.name,
+							function_call: c.content,
+						});
+					} else {
+						messages.push({
+							role: message.role,
+							content: c.content,
+							name: message.name,
+						});
+					}
+					break;
+
+				default:
+					throw new Error('Message type unsupported by this model');
+			}
 		}
 
-		return response;
+		return messages;
 	}
 }

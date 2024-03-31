@@ -1,5 +1,6 @@
 import Symposium from "./Symposium.js";
 import Thread from "./Thread.js";
+import Message from "./Message.js";
 
 export default class Agent {
 	name = 'Agent';
@@ -88,7 +89,7 @@ export default class Agent {
 
 	async message(thread, text) {
 		await this.log('user_message', text);
-		thread.addUserMessage(text);
+		thread.addMessage('user', text);
 
 		await this.execute(thread, text);
 	}
@@ -123,7 +124,8 @@ export default class Agent {
 	async generateCompletion(thread, payload = {}, retry_counter = 1) {
 		try {
 			const model = Symposium.getModelByName(thread.state.model);
-			return model.generate(thread, payload, await this.getFunctions());
+			const messages = await model.generate(thread, payload, await this.getFunctions());
+			return messages.map(m => model.supports_functions ? m : this.parseFunctions(m));
 		} catch (error) {
 			if (error.response) {
 				console.error(error.response.status);
@@ -148,22 +150,51 @@ export default class Agent {
 		}
 	}
 
+	parseFunctions(message) {
+		const newContent = [];
+		for (let m of message.content) {
+			if (m.type === 'text' && m.content.match(/```\nCALL [A-Za-z0-9_]+\n(\{.+\}\n)?```/)) {
+				const splitted = m.content.split('```');
+				for (let text of splitted) {
+					const match = text.match(/^CALL ([A-Za-z0-9_]+)\n([\s\S]*)$/);
+					if (match)
+						m.push({type: 'function', content: {name: match[1], arguments: JSON.parse(match[2] || '{}')}});
+					else
+						m.push({type: 'text', content: text.trim()});
+				}
+			} else {
+				newContent.push(m);
+			}
+		}
+
+		message.content = newContent;
+		return message;
+	}
+
 	async handleCompletion(thread, completion) {
-		for (let message of completion.messages) {
-			thread.addMessage(message);
-			await this.log('ai_message', message.text);
-			await thread.reply(message.text);
+		let call_function = null;
+		for (let message of completion) {
+			thread.addDirectMessage(message);
+			await this.log('ai_message', message);
+
+			for (let m of message.content) {
+				switch (m.type) {
+					case 'text':
+						await thread.reply(m.content);
+						break;
+
+					case 'function':
+						if (call_function)
+							throw new Error('The model replied with more than one function');
+						else
+							call_function = m.content;
+						break;
+				}
+			}
 		}
 
-		if (completion.function) {
-			thread.addAssistantMessage('', {
-				name: completion.function.name,
-				arguments: JSON.stringify(completion.function_call.args),
-			});
-		}
-
-		if (completion.function)
-			return this.callFunction(thread, completion.function);
+		if (call_function)
+			return this.callFunction(thread, call_function);
 		else
 			return thread.storeState();
 	}
@@ -199,11 +230,11 @@ export default class Agent {
 		await this.log('function_call', function_call);
 
 		try {
-			const response = await functions.get(function_call.name).tool.callFunction(thread, function_call.name, function_call.args);
-			thread.addFunctionMessage(response, function_call.name);
+			const response = await functions.get(function_call.name).tool.callFunction(thread, function_call.name, function_call.arguments);
+			thread.addMessage('function', JSON.stringify(response), function_call.name);
 			await this.log('function_response', response);
 		} catch (error) {
-			thread.addFunctionMessage({error}, function_call.name);
+			thread.addMessage('function', JSON.stringify({error}), function_call.name);
 			await this.log('function_response', {error});
 		}
 

@@ -33,7 +33,7 @@ export default class Thread {
 		const conv = await Redis.get('thread-' + this.id);
 		if (conv) {
 			this.state = conv.state || {};
-			this.messages = conv.messages.map(m => (new Message(m.role, m.text, m.name, m.function_call, m.tags || [])));
+			this.messages = conv.messages.map(m => new Message(m.role, m.content, m.name, m.tags));
 			return true;
 		} else {
 			return false;
@@ -53,33 +53,12 @@ export default class Thread {
 		}, 0);
 	}
 
-	getMessagesJson() {
-		return this.messages.map(m => ({
-			role: m.role,
-			content: m.text,
-			name: m.name || undefined,
-			function_call: m.function_call || undefined,
-		}));
-	}
-
-	addMessage(message) {
+	addDirectMessage(message) {
 		this.messages.push(message);
 	}
 
-	addSystemMessage(text, tags = []) {
-		this.messages.push(new Message('system', text, null, null, tags));
-	}
-
-	addUserMessage(text, name = null, tags = []) {
-		this.messages.push(new Message('user', text, name, null, tags));
-	}
-
-	addAssistantMessage(text, function_call = null, tags = []) {
-		this.messages.push(new Message('assistant', text, null, function_call, tags));
-	}
-
-	addFunctionMessage(response, name = null, tags = []) {
-		this.messages.push(new Message('function', JSON.stringify(response), name, null, tags));
+	addMessage(role, content = [], name = undefined, tags = []) {
+		this.addDirectMessage(new Message(role, content, name, tags));
 	}
 
 	removeMessagesWithTag(tag) {
