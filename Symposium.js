@@ -36,4 +36,14 @@ export default class Symposium {
 	static getModelByLabel(label) {
 		return Array.from(this.models.values()).find(model => model.label === label);
 	}
+
+	static extractFunctionFromResponse(messages) {
+		for (let message of messages) {
+			const functionResponse = message.content.filter(c => c.type === 'function');
+			if (functionResponse.length)
+				return functionResponse[0].content.arguments;
+		}
+
+		return null;
+	}
 }

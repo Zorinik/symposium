@@ -1,6 +1,5 @@
 import Symposium from "./Symposium.js";
 import MemoryHandler from "./MemoryHandler.js";
-import {encoding_for_model} from "tiktoken";
 
 export default class Summarizer extends MemoryHandler {
 	constructor(threshold = 0.7, summary_length = 0.5) {
@@ -14,19 +13,14 @@ export default class Summarizer extends MemoryHandler {
 		if (!model)
 			return thread;
 
-		const encoder = encoding_for_model(model.name_for_tiktoken);
-		const tokens = this.countTokens(encoder, thread);
+		const tokens = await model.countTokens(thread);
 		if (tokens >= model.tokens * this.threshold)
-			return await this.summarize(encoder, thread, model.tokens * this.summary_length);
+			return await this.summarize(model, thread, model.tokens * this.summary_length);
 		else
 			return thread;
 	}
 
-	countTokens(encoder, thread) {
-		return encoder.encode(thread.messages.map(m => m.text).join('')).length;
-	}
-
-	async summarize(encoder, thread, maxLength) {
+	async summarize(model, thread, maxLength) {
 		let summaryThread = thread.clone(false);
 
 		let currentStep = 'system';
@@ -37,7 +31,7 @@ export default class Summarizer extends MemoryHandler {
 						currentStep = 'summary';
 					break;
 				case 'summary':
-					if (message.role === 'user' && this.hasPassedLimit(encoder, summaryThread, maxLength)) {
+					if (message.role === 'user' && (await this.hasPassedLimit(model, summaryThread, maxLength))) {
 						summaryThread = await this.doSummarize(summaryThread, maxLength);
 						currentStep = 'retain';
 					}
@@ -50,8 +44,8 @@ export default class Summarizer extends MemoryHandler {
 		return summaryThread;
 	}
 
-	hasPassedLimit(encoder, thread, maxLength) {
-		let length = this.countTokens(encoder, thread);
+	async hasPassedLimit(model, thread, maxLength) {
+		const length = await model.countTokens(thread);
 		return length > maxLength;
 	}
 
@@ -79,13 +73,16 @@ export default class Summarizer extends MemoryHandler {
 		if (!summary)
 			return false;
 
-		// TODO: sistemare con nuova interfaccia
 		let summarizedThread = thread.clone(false);
 		for (let message of thread.messages) {
 			if (message.role === 'system' && !message.tags.includes('summary')) {
 				summarizedThread.messages.push(message);
 			} else {
-				summarizedThread.addMessage('system', "This is what happened until now:\n" + summary.function_call.arguments.summary, ['summary']);
+				const functionResponse = Symposium.extractFunctionFromResponse(summary);
+				if (functionResponse)
+					throw new Error('Errore durante la generazione di un riassunto interno');
+
+				summarizedThread.addMessage('system', "This is what happened until now:\n" + functionResponse.summary, undefined, ['summary']);
 				break;
 			}
 		}

@@ -18,7 +18,7 @@ export default class AnthropicModel extends Model {
 
 		if (functions.length && !this.supports_functions) {
 			// Se il modello non supporta nativamente le funzioni, aggiungo il prompt al messaggio di sistema
-			const functions_prompt = this.promptFromFunctions(functions);
+			const functions_prompt = this.promptFromFunctions(payload, functions);
 			system += "\n\n" + functions_prompt;
 			functions = [];
 		}

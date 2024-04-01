@@ -1,9 +1,11 @@
 import Model from "../Model.js";
 import OpenAI from "openai";
 import Message from "../Message.js";
+import {encoding_for_model} from "tiktoken";
 
 export default class OpenAIModel extends Model {
 	openai;
+	name_for_tiktoken;
 	supports_functions = true;
 
 	getOpenAi() {
@@ -18,7 +20,7 @@ export default class OpenAIModel extends Model {
 
 		if (functions.length && !this.supports_functions) {
 			// Se il modello non supporta nativamente le funzioni, inserisco il prompt ad hoc come ultimo messaggio di sistema
-			const functions_prompt = this.promptFromFunctions(functions);
+			const functions_prompt = this.promptFromFunctions(payload, functions);
 			let system_messages = [], other_messages = [], first_found = false;
 			for (let message of messages) {
 				if (!first_found && message.role !== 'system')
@@ -72,6 +74,19 @@ export default class OpenAIModel extends Model {
 		return [
 			new Message('assistant', message_content),
 		];
+	}
+
+	async countTokens(thread) {
+		try {
+			const encoder = encoding_for_model(this.name_for_tiktoken || this.name);
+
+			const texts = [];
+			for (let message of thread.messages)
+				texts.push(message.content.map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content)).join(''));
+			return encoder.encode(texts.join('')).length;
+		} catch (e) {
+			throw new Error('Error while counting tokens');
+		}
 	}
 
 	convertMessage(message) {

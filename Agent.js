@@ -179,7 +179,7 @@ export default class Agent {
 		let call_function = null;
 		for (let message of completion) {
 			thread.addDirectMessage(message);
-			await this.log('ai_message', message);
+			await this.log('ai_message', message.content);
 
 			for (let m of message.content) {
 				switch (m.type) {
