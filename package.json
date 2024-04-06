@@ -1,13 +1,13 @@
 {
   "type": "module",
   "name": "symposium",
-  "version": "0.5.6",
+  "version": "0.6.4",
   "description": "Agents",
   "main": "index.js",
   "author": "Domenico Giambra",
   "license": "ISC",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.19.1",
+    "@anthropic-ai/sdk": "^0.20.0",
     "@travio/redis": "^2.0.0",
     "openai": "^4.12.1",
     "tiktoken": "^1.0.10"

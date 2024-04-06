@@ -121,10 +121,10 @@ export default class Agent {
 		}
 	}
 
-	async generateCompletion(thread, payload = {}, retry_counter = 1) {
+	async generateCompletion(thread, options = {}, retry_counter = 1) {
 		try {
 			const model = Symposium.getModelByName(thread.state.model);
-			const messages = await model.generate(thread, payload, await this.getFunctions());
+			const messages = await model.generate(thread, await this.getFunctions(), options);
 			return messages.map(m => model.supports_functions ? m : this.parseFunctions(m));
 		} catch (error) {
 			if (error.response) {
@@ -136,7 +136,7 @@ export default class Agent {
 						setTimeout(resolve, 1000);
 					});
 
-					return this.generateCompletion(thread, payload, retry_counter + 1);
+					return this.generateCompletion(thread, options, retry_counter + 1);
 				}
 
 				await thread.reply('# Errore ' + error.response.status + ': ' + JSON.stringify(error.response.data));
@@ -235,10 +235,20 @@ export default class Agent {
 
 		try {
 			const response = await functions.get(function_call.name).tool.callFunction(thread, function_call.name, function_call.arguments);
-			thread.addMessage('function', JSON.stringify(response), function_call.name);
+			thread.addMessage('function', [
+				{
+					type: 'function_response',
+					content: {response, id: function_call.id || undefined},
+				},
+			], function_call.name);
 			await this.log('function_response', response);
 		} catch (error) {
-			thread.addMessage('function', JSON.stringify({error}), function_call.name);
+			thread.addMessage('function', [
+				{
+					type: 'function_response',
+					content: {response: {error}},
+				},
+			], function_call.name);
 			await this.log('function_response', {error});
 		}
 

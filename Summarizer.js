@@ -67,7 +67,7 @@ export default class Summarizer extends MemoryHandler {
 					}
 				},
 			],
-			function_call: {name: 'summarize'},
+			force_function: 'summarize',
 		});
 
 		if (!summary)

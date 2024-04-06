@@ -15,12 +15,16 @@ export default class OpenAIModel extends Model {
 		return this.openai;
 	}
 
-	async generate(thread, payload = {}, functions = []) {
+	async generate(thread, functions = [], options = {}) {
+		const parsed = this.parseOptions(options, functions);
+		options = parsed.options;
+		functions = parsed.functions;
+
 		let messages = thread.messages;
 
 		if (functions.length && !this.supports_functions) {
 			// Se il modello non supporta nativamente le funzioni, inserisco il prompt ad hoc come ultimo messaggio di sistema
-			const functions_prompt = this.promptFromFunctions(payload, functions);
+			const functions_prompt = this.promptFromFunctions(options, functions);
 			let system_messages = [], other_messages = [], first_found = false;
 			for (let message of messages) {
 				if (!first_found && message.role !== 'system')
@@ -46,14 +50,12 @@ export default class OpenAIModel extends Model {
 			model: this.name,
 			messages: convertedMessages,
 			functions,
-			...payload,
 		};
 
-		if (!completion_payload.functions?.length) {
+		if (options.force_function)
+			completion_payload.function_call = {name: options.force_function};
+		if (!completion_payload.functions.length)
 			delete completion_payload.functions;
-			if (completion_payload.hasOwnProperty('function_call'))
-				delete completion_payload.function_call;
-		}
 
 		const chatCompletion = await this.getOpenAi().chat.completions.create(completion_payload);
 		const completion = chatCompletion.choices[0].message;
@@ -115,6 +117,22 @@ export default class OpenAIModel extends Model {
 						messages.push({
 							role: message.role,
 							content: '```CALL \n' + c.content.name + '\n' + JSON.stringify(c.content.arguments || {}) + '\n```',
+							name: message.name,
+						});
+					}
+					break;
+
+				case 'function_response':
+					if (this.supports_functions) {
+						messages.push({
+							role: message.role,
+							content: JSON.stringify(c.content.response),
+							name: message.name,
+						});
+					} else {
+						messages.push({
+							role: 'user',
+							content: 'FUNCTION RESPONSE:\n' + JSON.stringify(c.content.response),
 							name: message.name,
 						});
 					}

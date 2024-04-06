@@ -10,7 +10,7 @@ export default class Model {
 			this.label = this.name;
 	}
 
-	async generate(thread, payload = {}, functions = []) {
+	async generate(thread, functions = [], options = {}) {
 		return null;
 	}
 
@@ -18,19 +18,35 @@ export default class Model {
 		throw new Error('countTokens not implemented in this model');
 	}
 
-	promptFromFunctions(payload, functions) {
-		if (payload.function_call)
-			functions = functions.filter(f => f.name !== payload.function_call);
+	parseOptions(options = {}, functions = []) {
+		options = {
+			functions: null,
+			force_function: null,
+			...options,
+		};
+
+		if (options.functions !== null)
+			functions = options.functions;
+
+		if (options.force_function && !functions.find(f => f.name === options.force_function))
+			throw new Error('Function ' + options.force_function + ' not found.');
+
+		return {options, functions};
+	}
+
+	promptFromFunctions(options, functions) {
+		if (options.force_function)
+			functions = functions.filter(f => f.name !== options.force_function);
 
 		if (!functions.length)
 			return '';
 
 		let message;
-		if (payload.function_call) {
+		if (options.force_function) {
 			message = "Nella prossima risposta, rispondi UNICAMENTE seguendo le seguenti istruzioni:\n";
 			message += functions[0].description + "\n";
 			delete functions[0].description;
-			message += "Rispondi con un messaggio che inizia con le parole:\nCALL " + payload.function_call + "\nE poi a capo un oggetto JSON che segue queste direttive OpenAPI:\n";
+			message += "Rispondi con un messaggio che inizia con le parole:\nCALL " + options.force_function + "\nE poi a capo un oggetto JSON che segue queste direttive OpenAPI:\n";
 		} else {
 			message = "Hai a disposizione alcune funzioni che puoi chiamare per ottenere risposte o compiere azioni. Ricorda che devi attendere la risposta dalla funzione per sapere se ha avuto successo. Per chiamare una funzione scrivi un messaggio che inizia con CALL nome_funzione e a capo inserisci il JSON con gli argomenti; delimitando il tutto da 3 caratteri ``` - ad esempio:\n" +
 				"```\n" +
@@ -50,7 +66,7 @@ export default class Model {
 			message += '=== ' + f.name + " ===\n" + JSON.stringify(f.parameters.properties) + "\n\n";
 		}
 
-		if (payload.function_call)
+		if (options.force_function)
 			message += "\nNella risposta non deve esserci NIENTE ALTRO se non queste due cose, non saranno prese in considerazione dal sistema altro genere di risposte.";
 
 		return message;

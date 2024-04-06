@@ -4,7 +4,7 @@ import Message from "../Message.js";
 
 export default class AnthropicModel extends Model {
 	anthropic;
-	supports_functions = false;
+	supports_functions = true;
 
 	getAnthropic() {
 		if (!this.anthropic)
@@ -13,12 +13,16 @@ export default class AnthropicModel extends Model {
 		return this.anthropic;
 	}
 
-	async generate(thread, payload = {}, functions = []) {
+	async generate(thread, functions = [], options = {}) {
+		const parsed = this.parseOptions(options, functions);
+		options = parsed.options;
+		functions = parsed.functions;
+
 		let [system, messages] = this.convertMessages(thread);
 
 		if (functions.length && !this.supports_functions) {
 			// Se il modello non supporta nativamente le funzioni, aggiungo il prompt al messaggio di sistema
-			const functions_prompt = this.promptFromFunctions(payload, functions);
+			const functions_prompt = this.promptFromFunctions(options, functions);
 			system += "\n\n" + functions_prompt;
 			functions = [];
 		}
@@ -28,10 +32,24 @@ export default class AnthropicModel extends Model {
 			system,
 			max_tokens: 4096,
 			messages,
-			...payload,
+			tools: functions.map(f => ({
+				name: f.name,
+				description: f.description,
+				input_schema: f.parameters,
+				required: f.required || undefined,
+			})),
 		};
 
-		const message = await this.getAnthropic().messages.create(completion_payload);
+		if (options.force_function) {
+			completion_payload.messages[completion_payload.messages.length - 1].content.push({
+				type: 'text',
+				text: 'Usa il tool "' + options.force_function + '" nella tua prossima risposta!',
+			});
+		}
+
+		const message = completion_payload.tools.length ?
+			await this.getAnthropic().beta.tools.messages.create(completion_payload)
+			: await this.getAnthropic().messages.create(completion_payload);
 
 		const message_content = [];
 		if (message.content) {
@@ -39,6 +57,17 @@ export default class AnthropicModel extends Model {
 				switch (m.type) {
 					case 'text':
 						message_content.push({type: 'text', content: m.text});
+						break;
+
+					case 'tool_use':
+						message_content.push({
+							type: 'function',
+							content: {
+								id: m.id,
+								name: m.name,
+								arguments: m.input,
+							},
+						});
 						break;
 
 					default:
@@ -53,32 +82,48 @@ export default class AnthropicModel extends Model {
 	}
 
 	convertMessages(thread) {
-		let system = [], messages = [];
+		let system = [], messages = [], lastMessage = null;
 		for (let message of thread.messages) {
 			if (message.role === 'system') {
 				system.push(message.content.map(c => c.content).join("\n"));
 			} else {
-				messages.push({
+				const parsedMessage = {
 					role: message.role === 'function' ? 'user' : message.role,
 					content: message.content.map(c => {
 						switch (c.type) {
 							case 'text':
 								return {
 									type: 'text',
-									text: (message.role === 'function' ? 'FUNCTION RESPONSE: ' : '') + c.content,
+									text: c.content.trim(),
 								};
 
 							case 'function':
 								return {
-									type: 'text',
-									text: '```CALL \n' + c.content.name + '\n' + JSON.stringify(c.content.arguments || {}) + '\n```',
+									type: 'tool_use',
+									name: c.content.name,
+									input: c.content.arguments,
+									id: c.content.id,
+								};
+
+							case 'function_response':
+								return {
+									type: 'tool_result',
+									content: JSON.stringify(c.content.response),
+									tool_use_id: c.content.id,
 								};
 
 							default:
 								throw new Error('Message type "' + c.type + '" unsupported by this model');
 						}
 					}),
-				});
+				};
+
+				if (lastMessage && lastMessage.role === parsedMessage.role) {
+					lastMessage.content = lastMessage.content.concat(message.content);
+				} else {
+					messages.push(parsedMessage);
+					lastMessage = parsedMessage;
+				}
 			}
 		}
 
