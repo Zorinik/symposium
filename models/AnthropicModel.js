@@ -112,6 +112,24 @@ export default class AnthropicModel extends Model {
 									tool_use_id: c.content.id,
 								};
 
+							case 'image':
+								switch (c.content.type) {
+									case 'base64':
+										return {
+											type: 'image',
+											source: {
+												type: 'base64',
+												media_type: c.content.mime,
+												data: c.content.data,
+											},
+										};
+
+									// TODO: url
+
+									default:
+										throw new Error('Image source not supported');
+								}
+
 							default:
 								throw new Error('Message type "' + c.type + '" unsupported by this model');
 						}

@@ -87,11 +87,11 @@ export default class Agent {
 		return null;
 	}
 
-	async message(thread, text) {
-		await this.log('user_message', text);
-		thread.addMessage('user', text);
+	async message(thread, content) {
+		await this.log('user_message', content);
+		thread.addMessage('user', content);
 
-		await this.execute(thread, text);
+		await this.execute(thread);
 	}
 
 	async execute(thread) {
