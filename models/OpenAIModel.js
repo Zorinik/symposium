@@ -49,13 +49,21 @@ export default class OpenAIModel extends Model {
 		const completion_payload = {
 			model: this.name,
 			messages: convertedMessages,
-			functions,
+			tools: functions.map(f => ({
+				type: 'function',
+				function: f,
+			})),
 		};
 
-		if (options.force_function)
-			completion_payload.function_call = {name: options.force_function};
-		if (!completion_payload.functions.length)
-			delete completion_payload.functions;
+		if (options.force_function) {
+			completion_payload.tool_choice = {
+				type: 'function',
+				function: {name: options.force_function},
+			};
+		}
+
+		if (!completion_payload.tools.length)
+			delete completion_payload.tools;
 
 		const chatCompletion = await this.getOpenAi().chat.completions.create(completion_payload);
 		const completion = chatCompletion.choices[0].message;
@@ -63,13 +71,20 @@ export default class OpenAIModel extends Model {
 		const message_content = [];
 		if (completion.content)
 			message_content.push({type: 'text', content: completion.content});
-		if (completion.function_call) {
+
+		if (completion.tool_calls?.length) {
 			message_content.push({
 				type: 'function',
-				content: {
-					name: completion.function_call.name,
-					arguments: completion.function_call.arguments ? JSON.parse(completion.function_call.arguments) : {},
-				},
+				content: completion.tool_calls.map(tool_call => {
+					if (tool_call.type !== 'function')
+						throw new Error('Unsupported tool type ' + tool_call.type);
+
+					return {
+						id: tool_call.id,
+						name: tool_call.function.name,
+						arguments: tool_call.function.arguments ? JSON.parse(tool_call.function.arguments) : {},
+					};
+				}),
 			});
 		}
 
@@ -108,15 +123,19 @@ export default class OpenAIModel extends Model {
 						messages.push({
 							role: message.role,
 							name: message.name,
-							function_call: {
-								name: c.content.name,
-								arguments: c.content.arguments ? JSON.stringify(c.content.arguments) : '{}',
-							},
+							tool_calls: c.content.map(tool_call => ({
+								id: tool_call.id,
+								type: 'function',
+								function: {
+									name: tool_call.name,
+									arguments: tool_call.arguments ? JSON.stringify(tool_call.arguments) : '{}',
+								},
+							})),
 						});
 					} else {
 						messages.push({
 							role: message.role,
-							content: '```CALL \n' + c.content.name + '\n' + JSON.stringify(c.content.arguments || {}) + '\n```',
+							content: c.content.map(f => '```CALL \n' + f.name + '\n' + JSON.stringify(f.arguments || {}) + '\n```').join("\n\n"),
 							name: message.name,
 						});
 					}
@@ -126,6 +145,7 @@ export default class OpenAIModel extends Model {
 					if (this.supports_functions) {
 						messages.push({
 							role: message.role,
+							tool_call_id: c.content.id,
 							content: JSON.stringify(c.content.response),
 							name: message.name,
 						});

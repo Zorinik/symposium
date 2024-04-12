@@ -2,7 +2,6 @@ import Redis from "@travio/redis";
 import Gpt35 from "./models/Gpt35.js";
 import Gpt4 from "./models/Gpt4.js";
 import Gpt4Turbo from "./models/Gpt4Turbo.js";
-import Gpt4Vision from "./models/Gpt4Vision.js";
 import Whisper from "./models/Whisper.js";
 import Claude3Haiku from "./models/Claude3Haiku.js";
 import Claude3Sonnet from "./models/Claude3Sonnet.js";
@@ -15,7 +14,6 @@ export default class Symposium {
 		this.loadModel(new Gpt35());
 		this.loadModel(new Gpt4());
 		this.loadModel(new Gpt4Turbo());
-		this.loadModel(new Gpt4Vision());
 		this.loadModel(new Whisper());
 
 		this.loadModel(new Claude3Haiku());
@@ -37,13 +35,18 @@ export default class Symposium {
 		return Array.from(this.models.values()).find(model => model.label === label);
 	}
 
-	static extractFunctionFromResponse(messages) {
+	static extractFunctionsFromResponse(messages) {
+		const functions = [];
 		for (let message of messages) {
 			const functionResponse = message.content.filter(c => c.type === 'function');
-			if (functionResponse.length)
-				return functionResponse[0].content.arguments;
+			if (functionResponse.length) {
+				for (let f of functionResponse) {
+					for (let r of f.content)
+						functions.push(r.arguments);
+				}
+			}
 		}
 
-		return null;
+		return functions;
 	}
 }

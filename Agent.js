@@ -162,7 +162,7 @@ export default class Agent {
 
 					const match = text.match(/^CALL ([A-Za-z0-9_]+)\n([\s\S]*)$/);
 					if (match)
-						newContent.push({type: 'function', content: {name: match[1], arguments: JSON.parse(match[2] || '{}')}});
+						newContent.push({type: 'function', content: [{name: match[1], arguments: JSON.parse(match[2] || '{}')}]});
 					else
 						newContent.push({type: 'text', content: text});
 				}
@@ -176,7 +176,7 @@ export default class Agent {
 	}
 
 	async handleCompletion(thread, completion) {
-		let call_function = null;
+		const functions = [];
 		for (let message of completion) {
 			thread.addDirectMessage(message);
 			await this.log('ai_message', message.content);
@@ -188,19 +188,31 @@ export default class Agent {
 						break;
 
 					case 'function':
-						if (call_function)
-							throw new Error('The model replied with more than one function');
-						else
-							call_function = m.content;
+						for (let f of m.content)
+							functions.push(f);
 						break;
 				}
 			}
 		}
 
-		if (call_function)
-			return this.callFunction(thread, call_function);
-		else
-			return thread.storeState();
+		if (functions.length) {
+			for(let f of functions) {
+				const response = await this.callFunction(thread, f);
+
+				thread.addMessage('tool', [
+					{
+						type: 'function_response',
+						content: {name: f.name, response, id: f.id || undefined},
+					},
+				], f.name);
+
+				await this.log('function_response', response);
+			}
+
+			await this.execute(thread);
+		}else {
+			await thread.storeState();
+		}
 	}
 
 	async getFunctions(parsed = true) {
@@ -227,32 +239,17 @@ export default class Agent {
 	}
 
 	async callFunction(thread, function_call) {
-		let functions = await this.getFunctions(false);
+		const functions = await this.getFunctions(false);
 		if (!functions.has(function_call.name))
 			throw new Error('Unrecognized function ' + function_call.name);
 
 		await this.log('function_call', function_call);
 
 		try {
-			const response = await functions.get(function_call.name).tool.callFunction(thread, function_call.name, function_call.arguments);
-			thread.addMessage('function', [
-				{
-					type: 'function_response',
-					content: {response, id: function_call.id || undefined},
-				},
-			], function_call.name);
-			await this.log('function_response', response);
+			return await functions.get(function_call.name).tool.callFunction(thread, function_call.name, function_call.arguments);
 		} catch (error) {
-			thread.addMessage('function', [
-				{
-					type: 'function_response',
-					content: {response: {error}},
-				},
-			], function_call.name);
-			await this.log('function_response', {error});
+			return {error};
 		}
-
-		await this.execute(thread);
 	}
 
 	async setModel(thread, label) {

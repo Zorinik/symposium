@@ -62,11 +62,13 @@ export default class AnthropicModel extends Model {
 					case 'tool_use':
 						message_content.push({
 							type: 'function',
-							content: {
-								id: m.id,
-								name: m.name,
-								arguments: m.input,
-							},
+							content: [
+								{
+									id: m.id,
+									name: m.name,
+									arguments: m.input,
+								},
+							],
 						});
 						break;
 
@@ -88,7 +90,7 @@ export default class AnthropicModel extends Model {
 				system.push(message.content.map(c => c.content).join("\n"));
 			} else {
 				const parsedMessage = {
-					role: message.role === 'function' ? 'user' : message.role,
+					role: ['function', 'tool'].includes(message.role) ? 'user' : message.role,
 					content: message.content.map(c => {
 						switch (c.type) {
 							case 'text':
@@ -100,9 +102,9 @@ export default class AnthropicModel extends Model {
 							case 'function':
 								return {
 									type: 'tool_use',
-									name: c.content.name,
-									input: c.content.arguments,
-									id: c.content.id,
+									name: c.content[0].name,
+									input: c.content[0].arguments,
+									id: c.content[0].id,
 								};
 
 							case 'function_response':

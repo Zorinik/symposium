@@ -78,11 +78,11 @@ export default class Summarizer extends MemoryHandler {
 			if (message.role === 'system' && !message.tags.includes('summary')) {
 				summarizedThread.messages.push(message);
 			} else {
-				const functionResponse = Symposium.extractFunctionFromResponse(summary);
-				if (functionResponse)
+				const functionsResponse = Symposium.extractFunctionsFromResponse(summary);
+				if (functionsResponse.length)
 					throw new Error('Errore durante la generazione di un riassunto interno');
 
-				summarizedThread.addMessage('system', "This is what happened until now:\n" + functionResponse.summary, undefined, ['summary']);
+				summarizedThread.addMessage('system', "This is what happened until now:\n" + functionsResponse[0].summary, undefined, ['summary']);
 				break;
 			}
 		}
