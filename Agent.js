@@ -1,10 +1,9 @@
 import Symposium from "./Symposium.js";
 import Thread from "./Thread.js";
-import Message from "./Message.js";
 
 export default class Agent {
 	name = 'Agent';
-	descriptionForFront = '';
+	description = null;
 	options = {};
 	threads;
 	functions = null;

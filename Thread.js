@@ -50,7 +50,7 @@ export default class Thread {
 		await Redis.set('thread-' + this.id, {
 			state: this.state,
 			messages: this.messages,
-		}, 0);
+		}, process.env.THREADS_TTL || 604800);
 	}
 
 	addDirectMessage(message) {
