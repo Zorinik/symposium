@@ -195,7 +195,7 @@ export default class Agent {
 		}
 
 		if (functions.length) {
-			for(let f of functions) {
+			for (let f of functions) {
 				const response = await this.callFunction(thread, f);
 
 				thread.addMessage('tool', [
@@ -209,7 +209,7 @@ export default class Agent {
 			}
 
 			await this.execute(thread);
-		}else {
+		} else {
 			await thread.storeState();
 		}
 	}

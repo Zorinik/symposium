@@ -18,7 +18,7 @@ export default class AnthropicModel extends Model {
 		options = parsed.options;
 		functions = parsed.functions;
 
-		let [system, messages] = this.convertMessages(thread);
+		let [system, messages] = await this.convertMessages(thread);
 
 		if (functions.length && !this.supports_functions) {
 			// Se il modello non supporta nativamente le funzioni, aggiungo il prompt al messaggio di sistema
@@ -83,59 +83,81 @@ export default class AnthropicModel extends Model {
 		];
 	}
 
-	convertMessages(thread) {
+	async convertMessages(thread) {
 		let system = [], messages = [], lastMessage = null;
 		for (let message of thread.messages) {
 			if (message.role === 'system') {
 				system.push(message.content.map(c => c.content).join("\n"));
 			} else {
+				const content = [];
+				for (let c of message.content) {
+					switch (c.type) {
+						case 'text':
+							content.push({
+								type: 'text',
+								text: c.content.trim(),
+							});
+							break;
+
+						case 'function':
+							content.push({
+								type: 'tool_use',
+								name: c.content[0].name,
+								input: c.content[0].arguments,
+								id: c.content[0].id,
+							});
+							break;
+
+						case 'function_response':
+							content.push({
+								type: 'tool_result',
+								content: JSON.stringify(c.content.response),
+								tool_use_id: c.content.id,
+							});
+							break;
+
+						case 'image':
+							switch (c.content.type) {
+								case 'base64':
+									content.push({
+										type: 'image',
+										source: {
+											type: 'base64',
+											media_type: c.content.mime,
+											data: c.content.data,
+										},
+									});
+									break;
+
+								case 'url':
+									console.log('Retrieving the image...');
+									const image = await fetch(c.content.data).then(r => (r?.ok ? r.arrayBuffer() : null));
+									if (!image)
+										throw new Error('Error while downloading the image');
+
+									content.push({
+										type: 'image',
+										source: {
+											type: 'base64',
+											media_type: c.content.mime,
+											data: Buffer.from(image).toString('base64'),
+										},
+									});
+									break;
+
+								default:
+									throw new Error('Image source not supported');
+							}
+							break;
+
+						default:
+							throw new Error('Message type "' + c.type + '" unsupported by this model');
+					}
+				}
+
 				const parsedMessage = {
 					role: ['function', 'tool'].includes(message.role) ? 'user' : message.role,
-					content: message.content.map(c => {
-						switch (c.type) {
-							case 'text':
-								return {
-									type: 'text',
-									text: c.content.trim(),
-								};
-
-							case 'function':
-								return {
-									type: 'tool_use',
-									name: c.content[0].name,
-									input: c.content[0].arguments,
-									id: c.content[0].id,
-								};
-
-							case 'function_response':
-								return {
-									type: 'tool_result',
-									content: JSON.stringify(c.content.response),
-									tool_use_id: c.content.id,
-								};
-
-							case 'image':
-								switch (c.content.type) {
-									case 'base64':
-										return {
-											type: 'image',
-											source: {
-												type: 'base64',
-												media_type: c.content.mime,
-												data: c.content.data,
-											},
-										};
-
-									// TODO: url
-
-									default:
-										throw new Error('Image source not supported');
-								}
-
-							default:
-								throw new Error('Message type "' + c.type + '" unsupported by this model');
-						}
-					}),
+					content,
 				};
 
 				if (lastMessage && lastMessage.role === parsedMessage.role) {

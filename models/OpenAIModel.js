@@ -126,6 +126,7 @@ export default class OpenAIModel extends Model {
 								type: 'image_url',
 								image_url: {
 									url: c.content.type === 'base64' ? 'data:' + c.content.mime + ';base64,' + c.content.data : c.content.data,
+									detail: c.content.detail || 'auto',
 								},
 							},
 						],
