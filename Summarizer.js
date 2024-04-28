@@ -13,11 +13,16 @@ export default class Summarizer extends MemoryHandler {
 		if (!model)
 			return thread;
 
-		const tokens = await model.countTokens(thread);
-		if (tokens >= model.tokens * this.threshold)
-			return await this.summarize(model, thread, model.tokens * this.summary_length);
-		else
+		try {
+			const tokens = await model.countTokens(thread);
+			if (tokens >= model.tokens * this.threshold)
+				return await this.summarize(model, thread, model.tokens * this.summary_length);
+			else
+				return thread;
+		} catch (e) {
+			console.error('Summarizer error: ' + String(e));
 			return thread;
+		}
 	}
 
 	async summarize(model, thread, maxLength) {
