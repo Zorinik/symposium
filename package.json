@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "symposium",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "description": "Agents",
   "main": "index.js",
   "author": "Domenico Giambra",
@@ -9,6 +9,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.20.0",
     "@travio/redis": "^2.0.0",
+    "groq-sdk": "^0.3.2",
     "openai": "^4.12.1",
     "tiktoken": "^1.0.10"
   }
