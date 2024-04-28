@@ -7,7 +7,6 @@ export default class Agent {
 	options = {};
 	threads;
 	functions = null;
-	middlewares = new Map();
 	tools = new Map();
 	default_model = 'gpt-4-turbo';
 
@@ -41,10 +40,6 @@ export default class Agent {
 
 	addTool(tool) {
 		this.tools.set(tool.name, tool);
-	}
-
-	addMiddleware(middleware) {
-		this.middlewares.set(middleware.name, middleware);
 	}
 
 	async initThread(thread) {
@@ -97,27 +92,9 @@ export default class Agent {
 		if (this.options.memory_handler)
 			thread = await this.options.memory_handler.handle(thread);
 
-		for (let middleware of this.middlewares.values()) {
-			let proceed = await middleware.before_exec(thread);
-			if (!proceed) {
-				await thread.storeState();
-				return;
-			}
-		}
-
 		const completion = await this.generateCompletion(thread);
-
 		if (completion)
 			await this.handleCompletion(thread, completion);
-
-		const reversedMiddlewares = [...this.middlewares.values()];
-		reversedMiddlewares.reverse();
-
-		for (let middleware of reversedMiddlewares) {
-			let proceed = await middleware.after_exec(thread);
-			if (!proceed)
-				return;
-		}
 	}
 
 	async generateCompletion(thread, options = {}, retry_counter = 1) {
