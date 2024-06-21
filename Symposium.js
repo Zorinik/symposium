@@ -7,6 +7,7 @@ import Whisper from "./models/Whisper.js";
 import Claude3Haiku from "./models/Claude3Haiku.js";
 import Claude3Sonnet from "./models/Claude3Sonnet.js";
 import Claude3Opus from "./models/Claude3Opus.js";
+import Claude35Sonnet from "./models/Claude35Sonnet.js";
 import Llama3 from "./models/Llama3.js";
 import Mixtral8 from "./models/Mixtral8.js";
 
@@ -23,6 +24,8 @@ export default class Symposium {
 		this.loadModel(new Claude3Haiku());
 		this.loadModel(new Claude3Sonnet());
 		this.loadModel(new Claude3Opus());
+
+		this.loadModel(new Claude35Sonnet());
 
 		this.loadModel(new Llama3());
 		this.loadModel(new Mixtral8());
