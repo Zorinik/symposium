@@ -41,15 +41,13 @@ export default class AnthropicModel extends Model {
 		};
 
 		if (options.force_function) {
-			completion_payload.messages[completion_payload.messages.length - 1].content.push({
-				type: 'text',
-				text: 'Usa il tool "' + options.force_function + '" nella tua prossima risposta!',
-			});
+			completion_payload.tool_choice = {
+				type: 'tool',
+				name: options.force_function,
+			};
 		}
 
-		const message = completion_payload.tools.length ?
-			await this.getAnthropic().beta.tools.messages.create(completion_payload)
-			: await this.getAnthropic().messages.create(completion_payload);
+		const message = await this.getAnthropic().messages.create(completion_payload);
 
 		const message_content = [];
 		if (message.content) {
