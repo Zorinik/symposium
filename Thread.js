@@ -1,5 +1,5 @@
 import Message from "./Message.js";
-import Redis from "@travio/redis";
+import Symposium from "./Symposium.js";
 
 export default class Thread {
 	id;
@@ -30,7 +30,7 @@ export default class Thread {
 		await this.flush();
 		this.state = {};
 
-		const conv = await Redis.get('thread-' + this.id);
+		const conv = await Symposium.storage.get('thread-' + this.id);
 		if (conv) {
 			this.state = conv.state || {};
 			this.messages = conv.messages.map(m => new Message(m.role, m.content, m.name, m.tags));
@@ -47,10 +47,10 @@ export default class Thread {
 	}
 
 	async storeState() {
-		await Redis.set('thread-' + this.id, {
+		await Symposium.storage.set('thread-' + this.id, {
 			state: this.state,
 			messages: this.messages,
-		}, process.env.THREADS_TTL || 604800);
+		});
 	}
 
 	addDirectMessage(message) {

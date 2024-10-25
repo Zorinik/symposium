@@ -1,4 +1,3 @@
-import Redis from "@travio/redis";
 import Gpt35 from "./models/Gpt35.js";
 import Gpt4 from "./models/Gpt4.js";
 import Gpt4Turbo from "./models/Gpt4Turbo.js";
@@ -14,8 +13,15 @@ import Mixtral8 from "./models/Mixtral8.js";
 
 export default class Symposium {
 	static models = new Map();
+	static storage = null;
 
-	static async init() {
+	/*
+	* Storage must expose the following methods:
+	* - async init()
+	* - async get(key)
+	* - async set(key, value)
+	 */
+	static async init(storage) {
 		this.loadModel(new Gpt35());
 		this.loadModel(new Gpt4());
 		this.loadModel(new Gpt4Turbo());
@@ -32,7 +38,8 @@ export default class Symposium {
 		this.loadModel(new Llama3Versatile());
 		this.loadModel(new Mixtral8());
 
-		return Redis.init();
+		this.storage = storage;
+		await this.storage.init();
 	}
 
 	static loadModel(model) {
