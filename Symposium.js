@@ -7,8 +7,7 @@ import Claude3Haiku from "./models/Claude3Haiku.js";
 import Claude3Sonnet from "./models/Claude3Sonnet.js";
 import Claude3Opus from "./models/Claude3Opus.js";
 import Claude35Sonnet from "./models/Claude35Sonnet.js";
-import Llama3Reasoning from "./models/Llama3Reasoning.js";
-import Llama3Versatile from "./models/Llama3Versatile.js";
+import Llama3 from "./models/Llama3.js";
 import Mixtral8 from "./models/Mixtral8.js";
 
 export default class Symposium {
@@ -34,8 +33,7 @@ export default class Symposium {
 
 		this.loadModel(new Claude35Sonnet());
 
-		this.loadModel(new Llama3Reasoning());
-		this.loadModel(new Llama3Versatile());
+		this.loadModel(new Llama3());
 		this.loadModel(new Mixtral8());
 
 		this.storage = storage;
