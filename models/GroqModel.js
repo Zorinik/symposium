@@ -104,7 +104,19 @@ export default class GroqModel extends Model {
 					break;
 
 				case 'image':
-					throw new Error('Images not supported by this model');
+					messages.push({
+						role: message.role,
+						content: [
+							{
+								type: 'image_url',
+								image_url: {
+									url: c.content.type === 'base64' ? 'data:' + c.content.mime + ';base64,' + c.content.data : c.content.data,
+								},
+							},
+						],
+						name: message.name,
+					});
+					break;
 
 				case 'function':
 					if (this.supports_functions) {
