@@ -103,7 +103,9 @@ export default class Agent {
 		if (completion) {
 			try {
 				thread = await this.afterExecute(thread, completion);
-				await this.handleCompletion(thread, completion);
+				const interrupt = await this.handleCompletion(thread, completion);
+				if (!interrupt)
+					await this.execute(thread);
 			} catch (e) {
 				console.error(e);
 
@@ -205,10 +207,15 @@ export default class Agent {
 				await this.log('function_response', response);
 			}
 
-			await this.execute(thread);
+			return this.afterHandle(thread, completion, true);
 		} else {
 			await thread.storeState();
+			return this.afterHandle(thread, completion, false);
 		}
+	}
+
+	async afterHandle(thread, completion, executed_function) {
+		return !executed_function;
 	}
 
 	async getFunctions(parsed = true) {
