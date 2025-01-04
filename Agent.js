@@ -9,6 +9,7 @@ export default class Agent {
 	functions = null;
 	tools = new Map();
 	default_model = 'gpt-4-turbo';
+	max_retries = 5;
 
 	constructor(options) {
 		this.options = {
@@ -88,26 +89,45 @@ export default class Agent {
 		await this.execute(thread);
 	}
 
-	async execute(thread) {
+	async beforeExecute(thread) {
 		if (this.options.memory_handler)
 			thread = await this.options.memory_handler.handle(thread);
+		return thread;
+	}
+
+	async execute(thread, counter = 0) {
+		if (counter === 0)
+			thread = await this.beforeExecute(thread);
 
 		const completion = await this.generateCompletion(thread);
-		if (completion)
-			await this.handleCompletion(thread, completion);
+		if (completion) {
+			try {
+				thread = await this.afterExecute(thread, completion);
+				await this.handleCompletion(thread, completion);
+			} catch (e) {
+				console.error(e);
+
+				if (counter < this.max_retries)
+					await this.execute(thread, counter + 1);
+			}
+		}
+	}
+
+	async afterExecute(thread, completion) {
+		return thread;
 	}
 
 	async generateCompletion(thread, options = {}, retry_counter = 1) {
 		try {
 			const model = Symposium.getModelByName(thread.state.model);
 			const messages = await model.generate(thread, await this.getFunctions(), options);
-			return messages.map(m => model.supports_functions ? m : this.parseFunctions(m));
+			return model.supports_functions ? messages : messages.map(m => this.parseFunctions(m));
 		} catch (error) {
 			if (error.response) {
 				console.error(error.response.status);
 				console.error(error.response.data);
 
-				if (error.response.status >= 500 && retry_counter <= 5) {
+				if (error.response.status >= 500 && retry_counter <= this.max_retries) {
 					await new Promise(resolve => {
 						setTimeout(resolve, 1000);
 					});
