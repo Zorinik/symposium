@@ -8,7 +8,7 @@ export default class Agent {
 	threads;
 	functions = null;
 	tools = new Map();
-	default_model = 'gpt-4-turbo';
+	default_model = 'gpt-4o';
 	max_retries = 5;
 
 	constructor(options) {
