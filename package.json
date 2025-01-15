@@ -8,7 +8,7 @@
   "license": "ISC",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.33.0",
-    "groq-sdk": "^0.9.0",
+    "groq-sdk": "^0.12.0",
     "openai": "^4.12.1",
     "tiktoken": "^1.0.10"
   }
