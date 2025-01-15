@@ -14,13 +14,19 @@ export default class Agent {
 	constructor(options) {
 		this.options = {
 			memory_handler: null,
+			interfaces: [],
 			...options,
 		};
 
+		this.threads = new Map();
+	}
+
+	async init() {
+		for (let i of this.options.interfaces)
+			await i.init(this);
+
 		if (this.options.memory_handler)
 			this.options.memory_handler.setAgent(this);
-
-		this.threads = new Map();
 	}
 
 	async reset(thread) {
@@ -51,7 +57,7 @@ export default class Agent {
 	async doInitThread(thread) {
 	}
 
-	async getThread(id, reply = null) {
+	async getThread(id) {
 		let thread = this.threads.get(id);
 		if (!thread) {
 			thread = new Thread(this.name + '-' + id, this);
@@ -63,9 +69,6 @@ export default class Agent {
 
 			this.threads.set(id, thread);
 		}
-
-		if (reply)
-			thread.reply = reply;
 
 		return thread;
 	}
@@ -82,7 +85,8 @@ export default class Agent {
 		return null;
 	}
 
-	async message(thread, content) {
+	async message(thread_id, content) {
+		const thread = await this.getThread(thread_id);
 		await this.log('user_message', content);
 		thread.addMessage('user', content);
 
@@ -137,15 +141,25 @@ export default class Agent {
 					return this.generateCompletion(thread, options, retry_counter + 1);
 				}
 
-				await thread.reply('# Errore ' + error.response.status + ': ' + JSON.stringify(error.response.data));
+				await this.error(thread, error.response.status + ': ' + JSON.stringify(error.response.data));
 			} else if (error.message) {
 				console.error(error.message);
-				await thread.reply('# Errore ' + error.message);
+				await this.error(thread, error.message);
 			} else {
 				console.error(error);
-				await thread.reply('# Errore interno');
+				await this.error(thread, 'Errore interno');
 			}
 		}
+	}
+
+	async error(thread, error) {
+		for (let i of this.options.interfaces)
+			await i.error(thread, error);
+	}
+
+	async output(thread, msg) {
+		for (let i of this.options.interfaces)
+			await i.output(thread, msg);
 	}
 
 	parseFunctions(message) {
@@ -182,7 +196,7 @@ export default class Agent {
 			for (let m of message.content) {
 				switch (m.type) {
 					case 'text':
-						await thread.reply(m.content);
+						await this.output(thread, m.content);
 						break;
 
 					case 'function':

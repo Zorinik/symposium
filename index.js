@@ -7,6 +7,7 @@ import Tool from "./Tool.js";
 import Logger from "./Logger.js";
 import MemoryHandler from "./MemoryHandler.js";
 import Summarizer from "./Summarizer.js";
+import Interface from "./Interface.js";
 
 export {
 	Symposium,
@@ -16,4 +17,5 @@ export {
 	Logger,
 	MemoryHandler,
 	Summarizer,
+	Interface,
 };

@@ -7,6 +7,7 @@ export default class Thread {
 	reply;
 	messages = [];
 	state = {};
+	interfaces = {};
 
 	constructor(id, agent) {
 		this.id = id;
