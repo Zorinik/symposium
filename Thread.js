@@ -3,20 +3,22 @@ import Symposium from "./Symposium.js";
 
 export default class Thread {
 	id;
+	unique;
 	agent;
-	reply;
 	messages = [];
 	state = {};
-	interfaces = {};
+	interface = null;
 
-	constructor(id, agent) {
+	constructor(id, i, agent) {
 		this.id = id;
+		this.unique = agent.name + '-' + id;
 		this.agent = agent;
+		this.interface = i;
 	}
 
 	clone(keepMessages = true) {
-		let newThread = new Thread(this.id, this.agent);
-		newThread.reply = this.reply;
+		let newThread = new Thread(this.id, this.interface, this.agent);
+		newThread.interface = this.interface;
 		newThread.state = this.state;
 		if (keepMessages)
 			newThread.messages = [...this.messages];
@@ -31,7 +33,7 @@ export default class Thread {
 		await this.flush();
 		this.state = {};
 
-		const conv = await Symposium.storage.get('thread-' + this.id);
+		const conv = await Symposium.storage.get('thread-' + this.unique);
 		if (conv) {
 			this.state = conv.state || {};
 			this.messages = conv.messages.map(m => new Message(m.role, m.content, m.name, m.tags));
@@ -48,7 +50,7 @@ export default class Thread {
 	}
 
 	async storeState() {
-		await Symposium.storage.set('thread-' + this.id, {
+		await Symposium.storage.set('thread-' + this.unique, {
 			state: this.state,
 			messages: this.messages,
 		});

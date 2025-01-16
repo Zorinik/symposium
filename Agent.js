@@ -57,10 +57,13 @@ export default class Agent {
 	async doInitThread(thread) {
 	}
 
-	async getThread(id) {
+	async getThread(id, i) {
 		let thread = this.threads.get(id);
-		if (!thread) {
-			thread = new Thread(this.name + '-' + id, this);
+		if (thread) {
+			if (thread.interface !== i)
+				throw new Error('Required thread is not from the same interface');
+		} else {
+			thread = new Thread(id, i, this);
 
 			if (!(await thread.loadState())) {
 				await this.resetState(thread);
@@ -73,24 +76,16 @@ export default class Agent {
 		return thread;
 	}
 
-	async getThreadIfExists(id) {
-		if (this.threads.has(id))
-			return this.threads.get(id);
+	async message(thread, i, content) {
+		if (typeof thread !== 'object')
+			thread = await this.getThread(thread, i);
 
-		const thread = new Thread(this.name + '-' + id, this);
-
-		if (await thread.loadState())
-			return thread;
-
-		return null;
-	}
-
-	async message(thread_id, content) {
-		const thread = await this.getThread(thread_id);
 		await this.log('user_message', content);
 		thread.addMessage('user', content);
 
 		await this.execute(thread);
+
+		return thread;
 	}
 
 	async beforeExecute(thread) {
@@ -153,13 +148,15 @@ export default class Agent {
 	}
 
 	async error(thread, error) {
-		for (let i of this.options.interfaces)
-			await i.error(thread, error);
+		const i = this.options.interfaces.find(i => i.name === thread.interface);
+		if (i)
+			return i.error(thread, error);
 	}
 
 	async output(thread, msg) {
-		for (let i of this.options.interfaces)
-			await i.output(thread, msg);
+		const i = this.options.interfaces.find(i => i.name === thread.interface);
+		if (i)
+			return i.output(thread, msg);
 	}
 
 	parseFunctions(message) {

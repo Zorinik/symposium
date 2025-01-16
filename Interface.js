@@ -1,4 +1,6 @@
 export default class Interface {
+	static name;
+
 	static async init(agent) {
 	}
 
