@@ -10,6 +10,7 @@ export default class Agent {
 	tools = new Map();
 	default_model = 'gpt-4o';
 	max_retries = 5;
+	callbacks = {};
 
 	constructor(options) {
 		this.options = {
@@ -76,9 +77,15 @@ export default class Agent {
 		return thread;
 	}
 
-	async message(thread, i, content) {
+	async message(thread, i, content, callback = null) {
 		if (typeof thread !== 'object')
 			thread = await this.getThread(thread, i);
+
+		if (callback) {
+			if (!this.callbacks.hasOwnProperty(i + '-' + thread.id))
+				this.callbacks[i + '-' + thread.id] = [];
+			this.callbacks[i + '-' + thread.id].push(callback);
+		}
 
 		await this.log('user_message', content);
 		thread.addMessage('user', content);
@@ -155,8 +162,14 @@ export default class Agent {
 
 	async output(thread, msg) {
 		const i = this.options.interfaces.find(i => i.name === thread.interface);
-		if (i)
+		if (i) {
+			if (this.callbacks.hasOwnProperty(i.name + '-' + thread.id) && this.callbacks[i.name + '-' + thread.id].length) {
+				const callback = this.callbacks[i.name + '-' + thread.id].shift();
+				await callback(msg);
+			}
+
 			return i.output(thread, msg);
+		}
 	}
 
 	parseFunctions(message) {

@@ -11,7 +11,7 @@ export default class Thread {
 
 	constructor(id, i, agent) {
 		this.id = id;
-		this.unique = agent.name + '-' + id;
+		this.unique = agent.name + '-' + i + '-' + id;
 		this.agent = agent;
 		this.interface = i;
 	}
