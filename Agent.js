@@ -58,7 +58,7 @@ export default class Agent {
 	async doInitThread(thread) {
 	}
 
-	async getThread(id, i) {
+	async getThread(id, i = 'default') {
 		let thread = this.threads.get(id);
 		if (thread) {
 			if (thread.interface !== i)
@@ -161,15 +161,14 @@ export default class Agent {
 	}
 
 	async output(thread, msg) {
-		const i = this.options.interfaces.find(i => i.name === thread.interface);
-		if (i) {
-			if (this.callbacks.hasOwnProperty(i.name + '-' + thread.id) && this.callbacks[i.name + '-' + thread.id].length) {
-				const callback = this.callbacks[i.name + '-' + thread.id].shift();
-				await callback(msg);
-			}
-
-			return i.output(thread, msg);
+		if (this.callbacks.hasOwnProperty(thread.interface + '-' + thread.id) && this.callbacks[thread.interface + '-' + thread.id].length) {
+			const callback = this.callbacks[thread.interface + '-' + thread.id].shift();
+			await callback(msg);
 		}
+
+		const i = this.options.interfaces.find(i => i.name === thread.interface);
+		if (i)
+			return i.output(thread, msg);
 	}
 
 	parseFunctions(message) {
