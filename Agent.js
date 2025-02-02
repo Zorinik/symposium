@@ -11,6 +11,7 @@ export default class Agent {
 	default_model = 'gpt-4o';
 	max_retries = 5;
 	callbacks = {};
+	utility = null;
 
 	constructor(options) {
 		this.options = {
@@ -105,13 +106,37 @@ export default class Agent {
 		if (counter === 0)
 			thread = await this.beforeExecute(thread);
 
-		const completion = await this.generateCompletion(thread);
+		const completion_options = {};
+		if (this.utility) {
+			if (!['function', 'text'].includes(this.utility.type))
+				throw new Error('Bad utility definition');
+
+			if (this.utility.type === 'function') {
+				if (!this.utility.function || !this.utility.function.name || !this.utility.function.parameters)
+					throw new Error('Bad function definition');
+
+				completion_options.functions = [
+					this.utility.function,
+				];
+				completion_options.force_function = this.utility.function.name;
+			}
+		}
+
+		const completion = await this.generateCompletion(thread, completion_options);
 		if (completion) {
 			try {
 				thread = await this.afterExecute(thread, completion);
-				const interrupt = await this.handleCompletion(thread, completion);
-				if (!interrupt)
-					await this.execute(thread);
+				const response = await this.handleCompletion(thread, completion);
+				switch (response.type) {
+					case 'return':
+						return response.value;
+
+					case 'continue':
+						return await this.execute(thread);
+
+					default:
+						throw new Error('Unknown response type');
+				}
 			} catch (e) {
 				console.error(e);
 
@@ -205,6 +230,9 @@ export default class Agent {
 			for (let m of message.content) {
 				switch (m.type) {
 					case 'text':
+						if (this.utility && this.utility.type === 'text')
+							return m.content;
+
 						await this.output(thread, m.content);
 						break;
 
@@ -219,6 +247,9 @@ export default class Agent {
 		if (functions.length) {
 			for (let f of functions) {
 				const response = await this.callFunction(thread, f);
+
+				if (this.utility && this.utility.type === 'function')
+					return response;
 
 				thread.addMessage('tool', [
 					{
