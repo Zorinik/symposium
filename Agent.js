@@ -134,6 +134,9 @@ export default class Agent {
 					case 'continue':
 						return await this.execute(thread);
 
+					case 'void':
+						return;
+
 					default:
 						throw new Error('Unknown response type');
 				}
@@ -231,7 +234,7 @@ export default class Agent {
 				switch (m.type) {
 					case 'text':
 						if (this.utility && this.utility.type === 'text')
-							return m.content;
+							return this.afterHandle(thread, completion, 'return', m.content);
 
 						await this.output(thread, m.content);
 						break;
@@ -249,7 +252,7 @@ export default class Agent {
 				const response = await this.callFunction(thread, f);
 
 				if (this.utility && this.utility.type === 'function')
-					return response;
+					return this.afterHandle(thread, completion, 'return', response);
 
 				thread.addMessage('tool', [
 					{
@@ -261,15 +264,18 @@ export default class Agent {
 				await this.log('function_response', response);
 			}
 
-			return this.afterHandle(thread, completion, true);
+			return this.afterHandle(thread, completion, 'continue');
 		} else {
 			await thread.storeState();
-			return this.afterHandle(thread, completion, false);
+			return this.afterHandle(thread, completion, 'void');
 		}
 	}
 
-	async afterHandle(thread, completion, executed_function) {
-		return !executed_function;
+	async afterHandle(thread, completion, type, value = null) {
+		return {
+			type,
+			value,
+		};
 	}
 
 	async getFunctions(parsed = true) {
