@@ -249,10 +249,10 @@ export default class Agent {
 
 		if (functions.length) {
 			for (let f of functions) {
-				const response = await this.callFunction(thread, f);
-
 				if (this.utility && this.utility.type === 'function')
-					return this.afterHandle(thread, completion, 'return', response);
+					return this.afterHandle(thread, completion, 'return', f.arguments);
+
+				const response = await this.callFunction(thread, f);
 
 				thread.addMessage('tool', [
 					{
