@@ -91,9 +91,7 @@ export default class Agent {
 		await this.log('user_message', content);
 		thread.addMessage('user', content);
 
-		await this.execute(thread);
-
-		return thread;
+		return this.execute(thread);
 	}
 
 	async beforeExecute(thread) {
