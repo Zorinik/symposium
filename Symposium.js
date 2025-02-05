@@ -11,6 +11,8 @@ import Claude3Opus from "./models/Claude3Opus.js";
 import Claude35Sonnet from "./models/Claude35Sonnet.js";
 import Llama3 from "./models/Llama3.js";
 import Mixtral8 from "./models/Mixtral8.js";
+import DeepSeekChat from "./models/DeepSeekChat.js";
+import DeepSeekReasoner from "./models/DeepSeekReasoner.js";
 
 export default class Symposium {
 	static models = new Map();
@@ -39,6 +41,9 @@ export default class Symposium {
 
 		this.loadModel(new Llama3());
 		this.loadModel(new Mixtral8());
+
+		this.loadModel(new DeepSeekChat());
+		this.loadModel(new DeepSeekReasoner());
 
 		this.storage = storage;
 		await this.storage.init();
