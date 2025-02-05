@@ -5,4 +5,5 @@ export default class Gpt4O extends OpenAIModel {
 	label = 'gpt-4o';
 	name_for_tiktoken = 'gpt-4';
 	tokens = 128000;
+	supports_structured_output = true;
 }

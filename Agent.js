@@ -12,6 +12,7 @@ export default class Agent {
 	max_retries = 5;
 	callbacks = {};
 	utility = null;
+	supports_structured_output = false;
 
 	constructor(options) {
 		this.options = {
@@ -113,10 +114,22 @@ export default class Agent {
 				if (!this.utility.function || !this.utility.function.name || !this.utility.function.parameters)
 					throw new Error('Bad function definition');
 
-				completion_options.functions = [
-					this.utility.function,
-				];
-				completion_options.force_function = this.utility.function.name;
+				if (this.supports_structured_output) {
+					// TODO: se ci sono più di 100 parametri, OpenAI non supporta gli structured output
+					completion_options.response_format = {
+						type: 'json_schema',
+						json_schema: {
+							name: this.utility.function.name,
+							schema: this.utility.function.parameters,
+							strict: true,
+						},
+					};
+				} else {
+					completion_options.functions = [
+						this.utility.function,
+					];
+					completion_options.force_function = this.utility.function.name;
+				}
 			}
 		}
 
@@ -231,9 +244,12 @@ export default class Agent {
 			for (let m of message.content) {
 				switch (m.type) {
 					case 'text':
-						if (this.utility && this.utility.type === 'text')
-							return this.afterHandle(thread, completion, 'return', m.content);
-
+						if (this.utility) {
+							if (this.utility.type === 'text')
+								return this.afterHandle(thread, completion, 'return', m.content);
+							if (this.utility.type === 'function' && this.supports_structured_output)
+								return this.afterHandle(thread, completion, 'return', JSON.parse(m.content));
+						}
 						await this.output(thread, m.content);
 						break;
 
