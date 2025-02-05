@@ -2,6 +2,8 @@ import Gpt35 from "./models/Gpt35.js";
 import Gpt4 from "./models/Gpt4.js";
 import Gpt4Turbo from "./models/Gpt4Turbo.js";
 import Gpt4O from "./models/Gpt4O.js";
+import GptO1 from "./models/GptO1.js";
+import GptO1Mini from "./models/GptO1Mini.js";
 import Whisper from "./models/Whisper.js";
 import Claude3Haiku from "./models/Claude3Haiku.js";
 import Claude3Sonnet from "./models/Claude3Sonnet.js";
@@ -25,6 +27,8 @@ export default class Symposium {
 		this.loadModel(new Gpt4());
 		this.loadModel(new Gpt4Turbo());
 		this.loadModel(new Gpt4O());
+		this.loadModel(new GptO1());
+		this.loadModel(new GptO1Mini());
 		this.loadModel(new Whisper());
 
 		this.loadModel(new Claude3Haiku());
