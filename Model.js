@@ -4,6 +4,7 @@ export default class Model {
 	label;
 	tokens;
 	supports_functions = false;
+	supports_structured_output = false;
 
 	constructor() {
 		if (!this.label)

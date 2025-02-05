@@ -62,6 +62,9 @@ export default class OpenAIModel extends Model {
 			};
 		}
 
+		if (options.response_format)
+			completion_payload.response_format = options.response_format;
+
 		if (!completion_payload.tools.length)
 			delete completion_payload.tools;
 

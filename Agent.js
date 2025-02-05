@@ -12,7 +12,6 @@ export default class Agent {
 	max_retries = 5;
 	callbacks = {};
 	utility = null;
-	supports_structured_output = false;
 
 	constructor(options) {
 		this.options = {
@@ -105,6 +104,8 @@ export default class Agent {
 		if (counter === 0)
 			thread = await this.beforeExecute(thread);
 
+		const model = Symposium.getModelByName(thread.state.model);
+
 		const completion_options = {};
 		if (this.utility) {
 			if (!['function', 'text'].includes(this.utility.type))
@@ -114,13 +115,16 @@ export default class Agent {
 				if (!this.utility.function || !this.utility.function.name || !this.utility.function.parameters)
 					throw new Error('Bad function definition');
 
-				if (this.supports_structured_output) {
-					// TODO: se ci sono più di 100 parametri, OpenAI non supporta gli structured output
+				let response_format = null;
+				if (model.supports_structured_output)
+					response_format = this.convertFunctionToResponseFormat(this.utility.function.parameters);
+
+				if (response_format && response_format.count <= 100) { // Se ci sono più di 100 parametri, OpenAI non supporta gli structured output
 					completion_options.response_format = {
 						type: 'json_schema',
 						json_schema: {
 							name: this.utility.function.name,
-							schema: this.utility.function.parameters,
+							schema: response_format.obj,
 							strict: true,
 						},
 					};
@@ -158,6 +162,40 @@ export default class Agent {
 					await this.execute(thread, counter + 1);
 			}
 		}
+	}
+
+	convertFunctionToResponseFormat(obj) {
+		if (obj.type !== 'object')
+			return {obj, count: 0};
+
+		let properties_count = 0, required = [];
+
+		for (let [key, property] of Object.entries(obj.properties || {})) {
+			properties_count++;
+			required.push(key);
+
+			if (property.type === 'object') {
+				const {obj: subobj, count} = this.convertFunctionToResponseFormat(property);
+				obj.properties[key] = subobj;
+				properties_count += count;
+			} else if (property.type === 'array' && property.items.type === 'object') {
+				const {obj: subobj, count} = this.convertFunctionToResponseFormat(property.items);
+				obj.properties[key] = {
+					type: 'array',
+					items: subobj,
+				};
+				properties_count += count;
+			}
+		}
+
+		return {
+			obj: {
+				...obj,
+				additionalProperties: false,
+				required,
+			},
+			count: properties_count,
+		};
 	}
 
 	async afterExecute(thread, completion) {
@@ -236,6 +274,8 @@ export default class Agent {
 	}
 
 	async handleCompletion(thread, completion) {
+		const model = Symposium.getModelByName(thread.state.model);
+
 		const functions = [];
 		for (let message of completion) {
 			thread.addDirectMessage(message);
@@ -247,7 +287,7 @@ export default class Agent {
 						if (this.utility) {
 							if (this.utility.type === 'text')
 								return this.afterHandle(thread, completion, 'return', m.content);
-							if (this.utility.type === 'function' && this.supports_structured_output)
+							if (this.utility.type === 'function' && model.supports_structured_output)
 								return this.afterHandle(thread, completion, 'return', JSON.parse(m.content));
 						}
 						await this.output(thread, m.content);
