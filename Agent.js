@@ -108,15 +108,15 @@ export default class Agent {
 
 		const completion_options = {};
 		if (this.utility) {
-			if (!['function', 'text'].includes(this.utility.type))
+			if (!['text', 'function', 'json'].includes(this.utility.type))
 				throw new Error('Bad utility definition');
 
-			if (this.utility.type === 'function') {
+			if (['function', 'json'].includes(this.utility.type)) {
 				if (!this.utility.function || !this.utility.function.name || !this.utility.function.parameters)
 					throw new Error('Bad function definition');
 
 				let response_format = null;
-				if (model.supports_structured_output)
+				if (this.utility.type === 'json' && model.supports_structured_output)
 					response_format = this.convertFunctionToResponseFormat(this.utility.function.parameters);
 
 				if (response_format && response_format.count <= 100) { // Se ci sono più di 100 parametri, OpenAI non supporta gli structured output
@@ -287,7 +287,7 @@ export default class Agent {
 						if (this.utility) {
 							if (this.utility.type === 'text')
 								return this.afterHandle(thread, completion, 'return', m.content);
-							if (this.utility.type === 'function' && model.supports_structured_output)
+							if (this.utility.type === 'json' && model.supports_structured_output)
 								return this.afterHandle(thread, completion, 'return', JSON.parse(m.content));
 						}
 						await this.output(thread, m.content);
@@ -303,7 +303,7 @@ export default class Agent {
 
 		if (functions.length) {
 			for (let f of functions) {
-				if (this.utility && this.utility.type === 'function')
+				if (this.utility && ['function', 'json'].includes(this.utility.type))
 					return this.afterHandle(thread, completion, 'return', f.arguments);
 
 				const response = await this.callFunction(thread, f);
