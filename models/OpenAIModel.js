@@ -110,12 +110,14 @@ export default class OpenAIModel extends Model {
 	}
 
 	convertMessage(message) {
-		const messages = [];
+		const messages = [],
+			role = message.role === 'system' ? this.system_role_name : message.role;
+
 		for (let c of message.content) {
 			switch (c.type) {
 				case 'text':
 					messages.push({
-						role: message.role,
+						role,
 						content: c.content,
 						name: message.name,
 					});
@@ -123,7 +125,7 @@ export default class OpenAIModel extends Model {
 
 				case 'image':
 					messages.push({
-						role: message.role,
+						role,
 						content: [
 							{
 								type: 'image_url',
@@ -140,7 +142,7 @@ export default class OpenAIModel extends Model {
 				case 'function':
 					if (this.supports_functions) {
 						messages.push({
-							role: message.role,
+							role,
 							name: message.name,
 							tool_calls: c.content.map(tool_call => ({
 								id: tool_call.id,
@@ -153,7 +155,7 @@ export default class OpenAIModel extends Model {
 						});
 					} else {
 						messages.push({
-							role: message.role,
+							role,
 							content: c.content.map(f => '```CALL \n' + f.name + '\n' + JSON.stringify(f.arguments || {}) + '\n```').join("\n\n"),
 							name: message.name,
 						});
@@ -163,7 +165,7 @@ export default class OpenAIModel extends Model {
 				case 'function_response':
 					if (this.supports_functions) {
 						messages.push({
-							role: message.role,
+							role,
 							tool_call_id: c.content.id,
 							content: JSON.stringify(c.content.response),
 							name: message.name,

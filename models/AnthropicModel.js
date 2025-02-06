@@ -154,7 +154,7 @@ export default class AnthropicModel extends Model {
 				}
 
 				const parsedMessage = {
-					role: ['function', 'tool'].includes(message.role) ? 'user' : message.role,
+					role: ['function', 'tool'].includes(message.role) ? 'user' : (message.role === 'system' ? this.system_role_name : message.role),
 					content,
 				};
 

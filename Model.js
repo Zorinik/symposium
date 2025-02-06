@@ -5,6 +5,7 @@ export default class Model {
 	tokens;
 	supports_functions = false;
 	supports_structured_output = false;
+	system_role_name = 'system';
 
 	constructor() {
 		if (!this.label)

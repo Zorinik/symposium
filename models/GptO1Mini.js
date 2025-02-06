@@ -6,4 +6,5 @@ export default class GptO1Mini extends OpenAIModel {
 	name_for_tiktoken = 'o1-mini';
 	tokens = 128000;
 	supports_structured_output = true;
+	system_role_name = 'developer';
 }
