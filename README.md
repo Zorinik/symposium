@@ -4,6 +4,10 @@ Symposium is an npm library designed to simplify the deployment and management o
 
 ---
 
+Note: I am as lazy as all devs are, hence this README is written by an AI as well :)) I will improve it with time if needed 
+
+---
+
 ## Table of Contents
 
 - [Overview](#overview)
@@ -144,7 +148,5 @@ Contributions to Symposium are welcome! If you have ideas, improvements, or bug 
 Symposium is released under the ISC License.
 
 ---
-
-Developed by **Domenico Giambra**
 
 For more details or to report issues, please refer to the repository's issue tracker. Enjoy building your AI-driven applications with Symposium!
