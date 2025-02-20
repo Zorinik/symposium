@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "symposium",
-  "version": "0.12.9",
+  "version": "0.12.10",
   "description": "Agents",
   "main": "index.js",
   "author": "Domenico Giambra",
