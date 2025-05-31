@@ -101,7 +101,7 @@ Symposium supports a variety of AI models, allowing you to switch between them b
     - GPT-4, GPT-4Turbo, GPT-4o
     - GPT-o1, GPT-o1 mini
 - **Anthropic Models**:
-    - Claude3 variants (Haiku, Sonnet, Opus, and 3.5 Sonnet)
+    - Claude variants (3.5 Sonnet, 3.7 Sonnet, 4 Sonnet, 4 Opus)
 - **Groq Models**:
     - Llama3, Mixtral8
 - **DeepSeek Models**:

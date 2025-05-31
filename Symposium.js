@@ -33,11 +33,10 @@ export default class Symposium {
 		this.loadModel(new GptO1Mini());
 		this.loadModel(new Whisper());
 
-		this.loadModel(new Claude3Haiku());
-		this.loadModel(new Claude3Sonnet());
-		this.loadModel(new Claude3Opus());
-
 		this.loadModel(new Claude35Sonnet());
+		this.loadModel(new Claude37Sonnet());
+		this.loadModel(new Claude4Sonnet());
+		this.loadModel(new Claude4Opus());
 
 		this.loadModel(new Llama3());
 		this.loadModel(new Mixtral8());
