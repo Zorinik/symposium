@@ -139,6 +139,27 @@ export default class OpenAIModel extends Model {
 					});
 					break;
 
+				case 'audio':
+					if (c.content.type !== 'base64')
+						throw new Error('Audio content must be base64 encoded for this model');
+					if (c.content.mime !== 'audio/wav')
+						throw new Error('Audio content must be in WAV format for this model');
+
+					messages.push({
+						role,
+						content: [
+							{
+								type: 'input_audio',
+								input_audio: {
+									data: c.content.data,
+									format: 'wav',
+								},
+							},
+						],
+						name: message.name,
+					});
+					break;
+
 				case 'function':
 					if (this.supports_functions) {
 						messages.push({
