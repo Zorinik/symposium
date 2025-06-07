@@ -85,17 +85,17 @@ export default class Symposium {
 		let file;
 		switch (audio.type) {
 			case 'url':
-				if (!audio.url)
+				if (!audio.data)
 					throw new Error('Audio URL is required');
 
-				if (audio.url.startsWith('/')) { // Local path
+				if (audio.data.startsWith('/')) { // Local path
 					// Get with fs
-					if (!fs.existsSync(audio.url))
-						throw new Error('Audio file does not exist at the specified path: ' + audio.url);
+					if (!fs.existsSync(audio.data))
+						throw new Error('Audio file does not exist at the specified path: ' + audio.data);
 
-					file = fs.readFileSync(audio.url);
+					file = fs.readFileSync(audio.data);
 				} else {
-					file = await fetch(audio.url).then(res => res.blob());
+					file = await fetch(audio.data).then(res => res.blob());
 				}
 
 				file = new File([file], 'audio.' + this.getExtFromMime(file.type), {type: file.type});
