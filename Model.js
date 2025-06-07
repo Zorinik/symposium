@@ -6,6 +6,7 @@ export default class Model {
 	supports_functions = false;
 	supports_structured_output = false;
 	system_role_name = 'system';
+	supports_audio = false;
 
 	constructor() {
 		if (!this.label)

@@ -12,6 +12,7 @@ export default class Agent {
 	max_retries = 5;
 	callbacks = {};
 	utility = null;
+	transcription_model = null;
 
 	constructor(options) {
 		this.options = {
@@ -205,6 +206,26 @@ export default class Agent {
 	async generateCompletion(thread, options = {}, retry_counter = 1) {
 		try {
 			const model = Symposium.getModelByName(thread.state.model);
+
+			for (let message of thread.messages) {
+				for (let c of message.content) {
+					if (c.type === 'audio' && !model.supports_audio) {
+						if (!process.env.TRANSCRIPTION_MODEL)
+							throw new Error('Audio support is not enabled for this model');
+						if (c.content.type !== 'base64')
+							throw new Error('Audio content must be base64 encoded');
+
+						if (!this.transcription_model)
+							this.transcription_model = Symposium.getModelByName(process.env.TRANSCRIPTION_MODEL);
+
+						const ext = c.content.mime === 'audio/mpeg' ? 'mp3' : 'wav';
+						const transcribed = await this.transcription_model.transcribe(this, thread, new File([Buffer.from(c.content.data, 'base64')], 'audio.' + ext, {type: c.content.type}));
+						c.type = 'text';
+						c.content = '[voice message] ' + transcribed;
+					}
+				}
+			}
+
 			const messages = await model.generate(thread, await this.getFunctions(), options);
 			return model.supports_functions ? messages : messages.map(m => this.parseFunctions(m));
 		} catch (error) {

@@ -9,8 +9,8 @@ export default class Whisper extends OpenAIModel {
 
 		const response = await this.getOpenAi().audio.transcriptions.create({
 			file,
-			model: 'whisper-1',
-			prompt: words.join(', '),
+			model: 'gpt-4o-transcribe',
+			prompt: 'Possibili parole usate: ' + words.join(', '),
 		});
 		return response.text;
 	}
