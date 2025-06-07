@@ -142,8 +142,8 @@ export default class OpenAIModel extends Model {
 				case 'audio':
 					if (c.content.type !== 'base64')
 						throw new Error('Audio content must be base64 encoded for this model');
-					if (c.content.mime !== 'audio/wav')
-						throw new Error('Audio content must be in WAV format for this model');
+					if (!['audio/mpeg', 'audio/wav'].includes(c.content.mime))
+						throw new Error('Audio content must have a valid MIME type');
 
 					messages.push({
 						role,
@@ -152,7 +152,7 @@ export default class OpenAIModel extends Model {
 								type: 'input_audio',
 								input_audio: {
 									data: c.content.data,
-									format: 'wav',
+									format: c.content.mime === 'audio/mpeg' ? 'mp3' : 'wav',
 								},
 							},
 						],
