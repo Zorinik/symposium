@@ -17,6 +17,7 @@ import DeepSeekReasoner from "./models/DeepSeekReasoner.js";
 export default class Symposium {
 	static models = new Map();
 	static storage = null;
+	static transcription_model = null;
 
 	/*
 	* Storage must expose the following methods:
@@ -73,5 +74,18 @@ export default class Symposium {
 		}
 
 		return functions;
+	}
+
+	static async transcribe(audio, prompt = null) {
+		if (!process.env.TRANSCRIPTION_MODEL)
+			throw new Error('Transcription is not enabled');
+		if (audio.type !== 'base64')
+			throw new Error('Audio content must be base64 encoded');
+
+		if (!this.transcription_model)
+			this.transcription_model = Symposium.getModelByName(process.env.TRANSCRIPTION_MODEL);
+
+		const ext = audio.type === 'audio/mpeg' ? 'mp3' : 'wav';
+		return this.transcription_model.transcribe(new File([Buffer.from(audio.data, 'base64')], 'audio.' + ext, {type: audio.type}), prompt);
 	}
 }
