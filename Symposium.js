@@ -1,3 +1,5 @@
+import fs from 'fs';
+
 import Gpt35 from "./models/Gpt35.js";
 import Gpt4 from "./models/Gpt4.js";
 import Gpt4Turbo from "./models/Gpt4Turbo.js";
@@ -79,13 +81,48 @@ export default class Symposium {
 	static async transcribe(audio, prompt = null) {
 		if (!process.env.TRANSCRIPTION_MODEL)
 			throw new Error('Transcription is not enabled');
-		if (audio.type !== 'base64')
-			throw new Error('Audio content must be base64 encoded');
+
+		let file;
+		switch (audio.type) {
+			case 'url':
+				if (!audio.url)
+					throw new Error('Audio URL is required');
+
+				if (audio.url.startsWith('/')) { // Local path
+					// Get with fs
+					if (!fs.existsSync(audio.url))
+						throw new Error('Audio file does not exist at the specified path: ' + audio.url);
+
+					file = fs.readFileSync(audio.url);
+				} else {
+					file = await fetch(audio.url).then(res => res.blob());
+				}
+
+				file = new File([file], 'audio.' + this.getExtFromMime(file.type), {type: file.type});
+				break;
+
+			case 'base64':
+				file = new File([Buffer.from(audio.data, 'base64')], 'audio.' + this.getExtFromMime(audio.type), {type: audio.type});
+				break;
+		}
 
 		if (!this.transcription_model)
 			this.transcription_model = Symposium.getModelByName(process.env.TRANSCRIPTION_MODEL);
 
-		const ext = audio.type === 'audio/mpeg' ? 'mp3' : 'wav';
-		return this.transcription_model.transcribe(new File([Buffer.from(audio.data, 'base64')], 'audio.' + ext, {type: audio.type}), prompt);
+		return this.transcription_model.transcribe(file, prompt);
+	}
+
+	static getExtFromMime(mime) {
+		const mimeToExt = {
+			'audio/mpeg': 'mp3',
+			'audio/wav': 'wav',
+			'audio/ogg': 'ogg',
+			'audio/flac': 'flac',
+			'audio/aac': 'aac',
+			'audio/mp4': 'm4a',
+			'audio/webm': 'webm',
+		};
+
+		return mimeToExt[mime] || null;
 	}
 }
