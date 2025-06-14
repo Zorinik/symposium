@@ -148,6 +148,17 @@ export default class AnthropicModel extends Model {
 							}
 							break;
 
+						case 'audio':
+							if (c.content.transcription) {
+								content.push({
+									type: 'text',
+									text: '[transcribed] ' + c.content.transcription,
+								});
+							} else {
+								throw new Error('Audio content is not supported by this model');
+							}
+							break;
+
 						default:
 							throw new Error('Message type "' + c.type + '" unsupported by this model');
 					}

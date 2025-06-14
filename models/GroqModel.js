@@ -158,6 +158,19 @@ export default class GroqModel extends Model {
 					}
 					break;
 
+
+				case 'audio':
+					if (c.content.transcription) {
+						messages.push({
+							role: message.role,
+							content: '[transcribed] ' + c.content.transcription,
+							name: message.name,
+						});
+					} else {
+						throw new Error('Audio content is not supported by this model');
+					}
+					break;
+
 				default:
 					throw new Error('Message type unsupported by this model');
 			}

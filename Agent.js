@@ -88,6 +88,17 @@ export default class Agent {
 			this.callbacks[i + '-' + thread.id].push(callback);
 		}
 
+		const model = Symposium.getModelByName(thread.state.model);
+		if (!model.supports_audio) {
+			for (let c of content) {
+				if (c.type === 'audio' && !c.content?.transcription) {
+					const words = await this.getPromptWordsForTranscription(thread);
+					const prompt = words.length ? 'Possibili parole usate: ' + words.join(', ') : null;
+					c.content.transcription = await Symposium.transcribe(c.content, prompt);
+				}
+			}
+		}
+
 		await this.log('user_message', content);
 		thread.addMessage('user', content);
 
@@ -205,19 +216,6 @@ export default class Agent {
 	async generateCompletion(thread, options = {}, retry_counter = 1) {
 		try {
 			const model = Symposium.getModelByName(thread.state.model);
-
-			for (let message of thread.messages) {
-				for (let c of message.content) {
-					if (c.type === 'audio' && !model.supports_audio) {
-						const words = await this.getPromptWordsForTranscription(thread);
-						const prompt = words.length ? 'Possibili parole usate: ' + words.join(', ') : null;
-						const transcribed = await Symposium.transcribe(c.content, prompt);
-						c.type = 'text';
-						c.content = '[voice message] ' + transcribed;
-					}
-				}
-			}
-
 			const messages = await model.generate(thread, await this.getFunctions(), options);
 			return model.supports_functions ? messages : messages.map(m => this.parseFunctions(m));
 		} catch (error) {

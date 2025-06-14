@@ -140,24 +140,34 @@ export default class OpenAIModel extends Model {
 					break;
 
 				case 'audio':
-					if (c.content.type !== 'base64')
-						throw new Error('Audio content must be base64 encoded for this model');
-					if (!['audio/mpeg', 'audio/wav'].includes(c.content.mime))
-						throw new Error('Audio content must have a valid MIME type');
+					if (this.supports_audio) {
+						if (c.content.type !== 'base64')
+							throw new Error('Audio content must be base64 encoded for this model');
+						if (!['audio/mpeg', 'audio/wav'].includes(c.content.mime))
+							throw new Error('Audio content must have a valid MIME type');
 
-					messages.push({
-						role,
-						content: [
-							{
-								type: 'input_audio',
-								input_audio: {
-									data: c.content.data,
-									format: c.content.mime === 'audio/mpeg' ? 'mp3' : 'wav',
+						messages.push({
+							role,
+							content: [
+								{
+									type: 'input_audio',
+									input_audio: {
+										data: c.content.data,
+										format: c.content.mime === 'audio/mpeg' ? 'mp3' : 'wav',
+									},
 								},
-							},
-						],
-						name: message.name,
-					});
+							],
+							name: message.name,
+						});
+					} else if (c.content.transcription) {
+						messages.push({
+							role,
+							content: '[transcribed] ' + c.content.transcription,
+							name: message.name,
+						});
+					} else{
+						throw new Error('Audio content is not supported by this model');
+					}
 					break;
 
 				case 'function':
