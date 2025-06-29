@@ -102,7 +102,7 @@ export default class Symposium {
 				break;
 
 			case 'base64':
-				file = new File([Buffer.from(audio.data, 'base64')], 'audio.' + this.getExtFromMime(audio.type), {type: audio.type});
+				file = new File([Buffer.from(audio.data, 'base64')], 'audio.' + this.getExtFromMime(audio.mime), {type: audio.mime});
 				break;
 		}
 
