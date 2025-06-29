@@ -259,6 +259,15 @@ export default class Agent {
 			return i.output(thread, msg);
 	}
 
+	async partial(thread, msg) {
+		if ((typeof msg) === 'text')
+			msg = {summary: msg};
+
+		const i = this.options.interfaces.find(i => i.name === thread.interface);
+		if (i)
+			return i.partial(thread, msg);
+	}
+
 	parseFunctions(message) {
 		const newContent = [];
 		for (let m of message.content) {
@@ -371,11 +380,18 @@ export default class Agent {
 		if (!functions.has(function_call.name))
 			throw new Error('Unrecognized function ' + function_call.name);
 
+		const func = functions.get(function_call.name);
+		const partialOutput = func.partialOutput ? ((typeof func.partialOutput) === 'text' ? func.partialOutput : func.partialOutput.call(this, function_call.arguments)) : 'Uso lo strumento ' + function_call.name + '...';
+		this.partial(thread, partialOutput);
+
 		await this.log('function_call', function_call);
 
 		try {
-			return await functions.get(function_call.name).tool.callFunction(thread, function_call.name, function_call.arguments);
+			const response = await func.tool.callFunction(thread, function_call.name, function_call.arguments);
+			this.partial(thread, 'Risposta ricevuta da ' + func.tool.name);
+			return response;
 		} catch (error) {
+			this.partial(thread, 'Ricevuto errore da ' + func.tool.name);
 			return {error};
 		}
 	}

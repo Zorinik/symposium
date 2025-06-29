@@ -7,6 +7,9 @@ export default class Interface {
 	static async output(thread, msg) {
 	}
 
+	static async partial(thread, msg) {
+	}
+
 	static async error(thread, error) {
 	}
 }
