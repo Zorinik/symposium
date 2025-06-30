@@ -412,4 +412,30 @@ export default class Agent {
 	async getPromptWordsForTranscription(thread) {
 		return [this.name];
 	}
+
+	async createRealtimeSession() {
+		// Thread fittizio
+		const thread = new Thread('temp', 'default', this);
+		await this.resetState(thread);
+		await this.initThread(thread);
+
+		const instructions = thread.messages.filter(m => m.role === 'system').map(m => m.content.map(c => c.content).join("\n")).join("\n");
+		const tools = (await this.getFunctions()).map(t => ({
+			type: 'function',
+			...t,
+		}));
+
+		return fetch('https://api.openai.com/v1/realtime/sessions', {
+			method: 'POST',
+			headers: {
+				"Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+				"Content-Type": 'application/json',
+			},
+			body: JSON.stringify({
+				model: 'gpt-4o-realtime-preview',
+				instructions,
+				tools,
+			}),
+		}).then(response => response.json());
+	}
 }
