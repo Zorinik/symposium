@@ -1,15 +1,16 @@
 {
   "type": "module",
   "name": "symposium",
-  "version": "0.14.7",
+  "version": "0.14.10",
   "description": "Agents",
   "main": "index.js",
   "author": "Domenico Giambra",
   "license": "ISC",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.55.0",
+    "@anthropic-ai/sdk": "^0.56.0",
     "groq-sdk": "^0.26.0",
     "openai": "^5.0.0",
-    "tiktoken": "^1.0.10"
+    "tiktoken": "^1.0.10",
+    "uuid": "^11.1.0"
   }
 }

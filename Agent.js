@@ -1,5 +1,6 @@
 import Symposium from "./Symposium.js";
 import Thread from "./Thread.js";
+import {v7 as uuid} from 'uuid';
 
 export default class Agent {
 	name = 'Agent';
@@ -415,23 +416,19 @@ export default class Agent {
 
 	async createRealtimeSession(thread_id = null, interface_name = 'default') {
 		// Se viene passato un thread esistente, lo si usa, altrimenti si crea un nuovo thread temporaneo
-		const thread = new Thread(thread_id || 'temp', interface_name, this);
-		if (thread_id === null) {
-			await this.resetState(thread);
-			await this.initThread(thread);
-		}
+		const thread = await this.getThread(thread_id || uuid(), interface_name);
 
-		let system_message = '', conversation = [];
+		const system_message = [], conversation = [];
 		for (let message of thread.messages) {
 			if (message.role === 'system')
-				system_message += message.content.map(c => c.content).join("\n") + "\n";
-			else
-				conversation.push(message.role + ': ' + message.content.map(c => (typeof c.content === 'string' ? c.content : (c.content.transcription || null))).filter(c => !!c).join("\n"));
+				system_message.push(message.content.map(c => c.content).join("\n"));
+			else if (!message.tags?.includes('reasoning'))
+				conversation.push('[' + message.role + '] ' + message.content.map(c => (typeof c.content === 'string' ? c.content : (c.content.transcription || JSON.stringify(c.content)))).filter(c => !!c).join("\n"));
 		}
 
-		let instructions = system_message.trim();
+		let instructions = system_message.join('\n');
 		if (conversation.length)
-			instructions += '\n\nPrevious conversation:\n-------------------\n' + conversation.join('\n\n');
+			instructions += '\n\n# Ecco la tua conversazione fino ad ora: #\n' + conversation.join('\n');
 
 		const tools = (await this.getFunctions()).map(t => ({
 			type: 'function',
