@@ -413,19 +413,32 @@ export default class Agent {
 		return [this.name];
 	}
 
-	async createRealtimeSession() {
-		// Thread fittizio
-		const thread = new Thread('temp', 'default', this);
-		await this.resetState(thread);
-		await this.initThread(thread);
+	async createRealtimeSession(thread_id = null, interface_name = 'default') {
+		// Se viene passato un thread esistente, lo si usa, altrimenti si crea un nuovo thread temporaneo
+		const thread = new Thread(thread_id || 'temp', interface_name, this);
+		if (thread_id === null) {
+			await this.resetState(thread);
+			await this.initThread(thread);
+		}
 
-		const instructions = thread.messages.filter(m => m.role === 'system').map(m => m.content.map(c => c.content).join("\n")).join("\n");
+		let system_message = '', conversation = [];
+		for (let message of thread.messages) {
+			if (message.role === 'system')
+				system_message += message.content.map(c => c.content).join("\n") + "\n";
+			else
+				conversation.push(message.role + ': ' + message.content.map(c => (typeof c.content === 'string' ? c.content : (c.content.transcription || null))).filter(c => !!c).join("\n"));
+		}
+
+		let instructions = system_message.trim();
+		if (conversation.length)
+			instructions += '\n\nPrevious conversation:\n-------------------\n' + conversation.join('\n\n');
+
 		const tools = (await this.getFunctions()).map(t => ({
 			type: 'function',
 			...t,
 		}));
 
-		return fetch('https://api.openai.com/v1/realtime/sessions', {
+		const response = await fetch('https://api.openai.com/v1/realtime/sessions', {
 			method: 'POST',
 			headers: {
 				"Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -437,5 +450,13 @@ export default class Agent {
 				tools,
 			}),
 		}).then(response => response.json());
+
+		if (thread_id === null)
+			thread.changeId(response.client_secret.value);
+
+		return {
+			response,
+			thread,
+		};
 	}
 }

@@ -25,6 +25,11 @@ export default class Thread {
 		return newThread;
 	}
 
+	changeId(id) {
+		this.id = id;
+		this.unique = this.agent.name + '-' + this.interface + '-' + id;
+	}
+
 	async flush() {
 		this.messages = [];
 	}
