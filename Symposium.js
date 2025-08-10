@@ -6,6 +6,7 @@ import Gpt4Turbo from "./models/Gpt4Turbo.js";
 import Gpt4O from "./models/Gpt4O.js";
 import GptO1 from "./models/GptO1.js";
 import GptO1Mini from "./models/GptO1Mini.js";
+import Gpt5 from "./models/Gpt5.js";
 import Whisper from "./models/Whisper.js";
 import Claude35Sonnet from "./models/Claude35Sonnet.js";
 import Claude37Sonnet from "./models/Claude37Sonnet.js";
@@ -15,6 +16,7 @@ import Llama3 from "./models/Llama3.js";
 import Mixtral8 from "./models/Mixtral8.js";
 import DeepSeekChat from "./models/DeepSeekChat.js";
 import DeepSeekReasoner from "./models/DeepSeekReasoner.js";
+import Grok4 from "./models/Grok4.js";
 
 export default class Symposium {
 	static models = new Map();
@@ -35,6 +37,7 @@ export default class Symposium {
 		this.loadModel(new GptO1());
 		this.loadModel(new GptO1Mini());
 		this.loadModel(new Whisper());
+		this.loadModel(new Gpt5());
 
 		this.loadModel(new Claude35Sonnet());
 		this.loadModel(new Claude37Sonnet());
@@ -46,6 +49,8 @@ export default class Symposium {
 
 		this.loadModel(new DeepSeekChat());
 		this.loadModel(new DeepSeekReasoner());
+
+		this.loadModel(new Grok4());
 
 		this.storage = storage;
 		await this.storage.init();
