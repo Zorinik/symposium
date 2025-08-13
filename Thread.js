@@ -38,7 +38,7 @@ export default class Thread {
 		await this.flush();
 		this.state = {};
 
-		const conv = await Symposium.storage.get('thread-' + this.unique);
+		const conv = Symposium.storage ? (await Symposium.storage.get('thread-' + this.unique)) : null;
 		if (conv) {
 			this.state = conv.state || {};
 			this.messages = conv.messages.map(m => new Message(m.role, m.content, m.name, m.tags));
@@ -55,10 +55,12 @@ export default class Thread {
 	}
 
 	async storeState() {
-		await Symposium.storage.set('thread-' + this.unique, {
-			state: this.state,
-			messages: this.messages,
-		});
+		if (Symposium.storage) {
+			await Symposium.storage.set('thread-' + this.unique, {
+				state: this.state,
+				messages: this.messages,
+			});
+		}
 	}
 
 	addDirectMessage(message) {
