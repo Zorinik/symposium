@@ -29,7 +29,7 @@ export default class Symposium {
 	* - async get(key)
 	* - async set(key, value)
 	 */
-	static async init(storage) {
+	static async init(storage = null) {
 		this.loadModel(new Gpt35());
 		this.loadModel(new Gpt4());
 		this.loadModel(new Gpt4Turbo());
@@ -52,8 +52,10 @@ export default class Symposium {
 
 		this.loadModel(new Grok4());
 
-		this.storage = storage;
-		await this.storage.init();
+		if (storage) {
+			this.storage = storage;
+			await this.storage.init();
+		}
 	}
 
 	static loadModel(model) {
