@@ -90,7 +90,7 @@ export default class Agent {
 		}
 
 		const model = Symposium.getModelByName(thread.state.model);
-		if (!model.supports_audio) {
+		if (!model.supports_audio && typeof content !== 'string') {
 			for (let c of content) {
 				if (c.type === 'audio' && !c.content?.transcription) {
 					const words = await this.getPromptWordsForTranscription(thread);
