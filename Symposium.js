@@ -7,6 +7,7 @@ import Gpt4O from "./models/Gpt4O.js";
 import GptO1 from "./models/GptO1.js";
 import GptO1Mini from "./models/GptO1Mini.js";
 import Gpt5 from "./models/Gpt5.js";
+import Gpt5Mini from "./models/Gpt5Mini.js";
 import Whisper from "./models/Whisper.js";
 import Claude35Sonnet from "./models/Claude35Sonnet.js";
 import Claude37Sonnet from "./models/Claude37Sonnet.js";
@@ -38,6 +39,7 @@ export default class Symposium {
 		this.loadModel(new GptO1Mini());
 		this.loadModel(new Whisper());
 		this.loadModel(new Gpt5());
+		this.loadModel(new Gpt5Mini());
 
 		this.loadModel(new Claude35Sonnet());
 		this.loadModel(new Claude37Sonnet());
