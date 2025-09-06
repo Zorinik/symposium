@@ -111,7 +111,10 @@ export default class Agent {
 		await this.log('user_message', content);
 		thread.addMessage('user', content);
 
-		return this.execute(thread);
+		const emitter = new BufferedEventEmitter();
+		emitter.emit('start', thread);
+
+		return this.execute(thread, emitter);
 	}
 
 	async beforeExecute(thread, emitter) {
@@ -120,9 +123,7 @@ export default class Agent {
 		return thread;
 	}
 
-	async execute(thread, counter = 0, existing_emitter = null) {
-		const emitter = existing_emitter || new BufferedEventEmitter();
-
+	async execute(thread, emitter, counter = 0) {
 		const execution = new Promise(async (resolve, reject) => {
 			try {
 				if (counter === 0)
@@ -189,7 +190,7 @@ export default class Agent {
 
 						case 'chat':
 							if (response?.type === 'continue')
-								return this.execute(thread, 0, emitter);
+								return this.execute(thread, emitter);
 
 							return resolve(null);
 
@@ -200,7 +201,7 @@ export default class Agent {
 					console.error(e);
 
 					if (counter < this.max_retries)
-						await this.execute(thread, counter + 1, emitter);
+						await this.execute(thread, emitter, counter + 1);
 				}
 			} catch (e) {
 				reject(e);
