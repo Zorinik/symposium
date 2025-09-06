@@ -1,6 +1,9 @@
+import {v7 as uuid} from 'uuid';
+
+import BufferedEventEmitter from "./BufferedEventEmitter.js";
+
 import Symposium from "./Symposium.js";
 import Thread from "./Thread.js";
-import {v7 as uuid} from 'uuid';
 
 export default class Agent {
 	name = 'Agent';
@@ -11,13 +14,13 @@ export default class Agent {
 	tools = new Map();
 	default_model = 'gpt-4o';
 	max_retries = 5;
-	callbacks = {};
+	type = 'chat'; // chat, utility
 	utility = null;
+	initialized = false;
 
 	constructor(options) {
 		this.options = {
 			memory_handler: null,
-			interfaces: [],
 			...options,
 		};
 
@@ -25,11 +28,20 @@ export default class Agent {
 	}
 
 	async init() {
-		for (let i of this.options.interfaces)
-			await i.init(this);
+		if (this.initialized)
+			return;
 
 		if (this.options.memory_handler)
 			this.options.memory_handler.setAgent(this);
+
+		if (this.type === 'utility') {
+			if (!this.utility || !this.utility.type)
+				throw new Error('Utility function not defined');
+			if (!['text', 'function', 'json'].includes(this.utility.type))
+				throw new Error('Bad utility definition');
+		}
+
+		this.initialized = true;
 	}
 
 	async reset(thread) {
@@ -60,13 +72,10 @@ export default class Agent {
 	async doInitThread(thread) {
 	}
 
-	async getThread(id, i = 'default') {
+	async getThread(id) {
 		let thread = this.threads.get(id);
-		if (thread) {
-			if (thread.interface !== i)
-				throw new Error('Required thread is not from the same interface');
-		} else {
-			thread = new Thread(id, i, this);
+		if (!thread) {
+			thread = new Thread(id, this);
 
 			if (!(await thread.loadState())) {
 				await this.resetState(thread);
@@ -79,15 +88,14 @@ export default class Agent {
 		return thread;
 	}
 
-	async message(thread, i, content, callback = null) {
-		if (typeof thread !== 'object')
-			thread = await this.getThread(thread, i);
+	async message(content, thread = null) {
+		if (!this.initialized)
+			throw new Error('Agent not initialized');
 
-		if (callback) {
-			if (!this.callbacks.hasOwnProperty(i + '-' + thread.id))
-				this.callbacks[i + '-' + thread.id] = [];
-			this.callbacks[i + '-' + thread.id].push(callback);
-		}
+		if (thread === null)
+			thread = uuid();
+		if (typeof thread !== 'object')
+			thread = await this.getThread(thread);
 
 		const model = Symposium.getModelByName(thread.state.model);
 		if (!model.supports_audio && typeof content !== 'string') {
@@ -106,23 +114,22 @@ export default class Agent {
 		return this.execute(thread);
 	}
 
-	async beforeExecute(thread) {
+	async beforeExecute(thread, emitter) {
 		if (this.options.memory_handler)
 			thread = await this.options.memory_handler.handle(thread);
 		return thread;
 	}
 
-	async execute(thread, counter = 0) {
+	async execute(thread, counter = 0, existing_emitter = null) {
+		const emitter = existing_emitter || new BufferedEventEmitter();
+
 		if (counter === 0)
-			thread = await this.beforeExecute(thread);
+			thread = await this.beforeExecute(thread, emitter);
 
 		const model = Symposium.getModelByName(thread.state.model);
 
 		const completion_options = {};
-		if (this.utility) {
-			if (!['text', 'function', 'json'].includes(this.utility.type))
-				throw new Error('Bad utility definition');
-
+		if (this.type === 'utility') {
 			if (['function', 'json'].includes(this.utility.type)) {
 				if (!this.utility.function || !this.utility.function.name || !this.utility.function.parameters)
 					throw new Error('Bad function definition');
@@ -131,7 +138,7 @@ export default class Agent {
 				if (this.utility.type === 'json' && model.supports_structured_output)
 					response_format = this.convertFunctionToResponseFormat(this.utility.function.parameters);
 
-				if (response_format && response_format.count <= 100) { // Se ci sono più di 100 parametri, OpenAI non supporta gli structured output
+				if (response_format && response_format.count <= 100) { // OpenAI does not support structured output if there are more than 100 parameters
 					completion_options.response_format = {
 						type: 'json_schema',
 						json_schema: {
@@ -149,30 +156,50 @@ export default class Agent {
 			}
 		}
 
-		const completion = await this.generateCompletion(thread, completion_options);
-		if (completion) {
-			try {
-				thread = await this.afterExecute(thread, completion);
-				const response = await this.handleCompletion(thread, completion);
-				switch (response.type) {
-					case 'return':
-						return response.value;
+		let completion;
+		try {
+			completion = await this.generateCompletion(thread, completion_options);
+		} catch (e) {
+			console.error(e.message);
+			switch (this.type) {
+				case 'chat':
+					emitter.emit('error', e.message);
+					return emitter;
 
-					case 'continue':
-						return await this.execute(thread);
+				case 'utility':
+					throw e;
 
-					case 'void':
-						return;
-
-					default:
-						throw new Error('Unknown response type');
-				}
-			} catch (e) {
-				console.error(e);
-
-				if (counter < this.max_retries)
-					await this.execute(thread, counter + 1);
+				default:
+					throw new Error('Bad agent type');
 			}
+		}
+
+		try {
+			thread = await this.afterExecute(thread, completion);
+			const response = await this.handleCompletion(thread, completion, emitter);
+
+			switch (this.type) {
+				case 'utility':
+					return response;
+
+				case 'chat':
+					if (!existing_emitter) {
+						emitter.on('data', data => {
+							if (data.type === 'response' && data.content.type === 'continue')
+								this.execute(thread, 0, emitter);
+						}, false);
+					}
+
+					return emitter;
+
+				default:
+					throw new Error('Bad agent type');
+			}
+		} catch (e) {
+			console.error(e);
+
+			if (counter < this.max_retries)
+				await this.execute(thread, counter + 1, emitter);
 		}
 	}
 
@@ -180,11 +207,16 @@ export default class Agent {
 		if (obj.type !== 'object')
 			return {obj, count: 0};
 
-		let properties_count = 0, required = [];
+		let properties_count = 0, all_required = false, required = [];
+		if (obj.required)
+			required = obj.required;
+		else
+			all_required = true;
 
 		for (let [key, property] of Object.entries(obj.properties || {})) {
 			properties_count++;
-			required.push(key);
+			if (all_required)
+				required.push(key);
 
 			if (property.type === 'object') {
 				const {obj: subobj, count} = this.convertFunctionToResponseFormat(property);
@@ -232,41 +264,13 @@ export default class Agent {
 					return this.generateCompletion(thread, options, retry_counter + 1);
 				}
 
-				await this.error(thread, error.response.status + ': ' + JSON.stringify(error.response.data));
+				throw new Error(error.response.status + ': ' + JSON.stringify(error.response.data));
 			} else if (error.message) {
-				console.error(error.message);
-				await this.error(thread, error.message);
+				throw new Error(error.message);
 			} else {
-				console.error(error);
-				await this.error(thread, 'Errore interno');
+				throw new Error('Errore interno');
 			}
 		}
-	}
-
-	async error(thread, error) {
-		const i = this.options.interfaces.find(i => i.name === thread.interface);
-		if (i)
-			return i.error(thread, error);
-	}
-
-	async output(thread, msg) {
-		if (this.callbacks.hasOwnProperty(thread.interface + '-' + thread.id) && this.callbacks[thread.interface + '-' + thread.id].length) {
-			const callback = this.callbacks[thread.interface + '-' + thread.id].shift();
-			await callback(msg);
-		}
-
-		const i = this.options.interfaces.find(i => i.name === thread.interface);
-		if (i)
-			return i.output(thread, msg);
-	}
-
-	async partial(thread, msg) {
-		if ((typeof msg) === 'text')
-			msg = {summary: msg};
-
-		const i = this.options.interfaces.find(i => i.name === thread.interface);
-		if (i)
-			return i.partial(thread, msg);
 	}
 
 	parseFunctions(message) {
@@ -294,7 +298,7 @@ export default class Agent {
 		return message;
 	}
 
-	async handleCompletion(thread, completion) {
+	async handleCompletion(thread, completion, emitter) {
 		const model = Symposium.getModelByName(thread.state.model);
 
 		const functions = [];
@@ -305,13 +309,14 @@ export default class Agent {
 			for (let m of message.content) {
 				switch (m.type) {
 					case 'text':
-						if (this.utility) {
+						if (this.type === 'utility') {
 							if (this.utility.type === 'text')
 								return this.afterHandle(thread, completion, 'return', m.content);
 							if (this.utility.type === 'json' && model.supports_structured_output)
 								return this.afterHandle(thread, completion, 'return', JSON.parse(m.content));
 						}
-						await this.output(thread, m.content);
+
+						emitter.emit('output', m.content);
 						break;
 
 					case 'function':
@@ -327,16 +332,16 @@ export default class Agent {
 				if (this.utility && ['function', 'json'].includes(this.utility.type))
 					return this.afterHandle(thread, completion, 'return', f.arguments);
 
-				const response = await this.callFunction(thread, f);
+				const function_response = await this.callFunction(thread, f, emitter);
 
 				thread.addMessage('tool', [
 					{
 						type: 'function_response',
-						content: {name: f.name, response, id: f.id || undefined},
+						content: {name: f.name, function_response, id: f.id || undefined},
 					},
 				], f.name);
 
-				await this.log('function_response', response);
+				await this.log('function_response', function_response);
 			}
 
 			return this.afterHandle(thread, completion, 'continue');
@@ -376,23 +381,23 @@ export default class Agent {
 			return this.functions;
 	}
 
-	async callFunction(thread, function_call) {
+	async callFunction(thread, function_call, emitter) {
 		const functions = await this.getFunctions(false);
 		if (!functions.has(function_call.name))
 			throw new Error('Unrecognized function ' + function_call.name);
 
 		const func = functions.get(function_call.name);
 		const partialOutput = func.partialOutput ? ((typeof func.partialOutput) === 'text' ? func.partialOutput : func.partialOutput.call(this, function_call.arguments)) : 'Uso lo strumento ' + function_call.name + '...';
-		this.partial(thread, partialOutput);
+		emitter.emit('partial', partialOutput);
 
 		await this.log('function_call', function_call);
 
 		try {
 			const response = await func.tool.callFunction(thread, function_call.name, function_call.arguments);
-			this.partial(thread, 'Risposta ricevuta da ' + func.tool.name);
+			emitter.emit('partial', 'Risposta ricevuta da ' + func.tool.name);
 			return response;
 		} catch (error) {
-			this.partial(thread, 'Ricevuto errore da ' + func.tool.name);
+			emitter.emit('partial', 'Ricevuto errore da ' + func.tool.name);
 			return {error};
 		}
 	}
@@ -414,15 +419,16 @@ export default class Agent {
 		return [this.name];
 	}
 
-	async createRealtimeSession(thread_id = null, interface_name = 'default', options = {}) {
+	// Currently specific for OpenAI Realtime API
+	async createRealtimeSession(thread_id = null, options = {}) {
 		options = {
 			include_thread: true,
 			language: 'it',
 			...options,
 		};
 
-		// Se viene passato un thread esistente, lo si usa, altrimenti si crea un nuovo thread temporaneo
-		const thread = await this.getThread(thread_id || uuid(), interface_name);
+		// If a thread is passed, it is used, otherwise a temporary thread is created
+		const thread = await this.getThread(thread_id || uuid());
 
 		const system_message = [], conversation = [];
 		for (let message of thread.messages) {

@@ -1,152 +1,282 @@
 # Symposium
 
-Symposium is an npm library designed to simplify the deployment and management of AI agents. Its modular and flexible architecture makes it easy to create agents that can interact with users, execute functions through integrated tools, and manage complex conversation threads—all while supporting multiple language models from various providers.
-
----
-
-Note: I am as lazy as all devs are, hence this README is written by an AI as well :)) I will improve it with time if needed 
-
----
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Features](#features)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Architecture](#architecture)
-- [Supported Models](#supported-models)
-- [Extending Symposium](#extending-symposium)
-- [Examples](#examples)
-- [Contributing](#contributing)
-- [License](#license)
-
----
-
-## Overview
-
-Symposium provides a robust framework for deploying AI agents with ease. It handles message threading, state management, logging, and even conversation summarization to keep interactions within token limits. With built-in support for multiple AI models and a plugin-like system for tools, Symposium enables developers to quickly build sophisticated agent-based applications.
-
----
+Symposium is a powerful and flexible Node.js framework for building Large Language Model (LLM)-powered agents. It provides a structured, extensible architecture for creating complex AI systems with distinct behaviors, tools, and memory.
 
 ## Features
 
-- **Agent Management**: Create and manage agents that process user messages and execute actions.
-- **Tool Integration**: Extend your agents’ capabilities by integrating custom tools with defined functions.
-- **Thread & Memory Handling**: Manage conversation state and threads seamlessly, with automatic summarization support.
-- **Multi-Agent Coordination**: Support for multi-agent systems to allow agents to collaborate and share tasks.
-- **Flexible Model Support**: Out-of-the-box compatibility with various models including OpenAI, Anthropic, Groq, and DeepSeek.
-- **Structured Function Calls**: Enable agents to call functions using structured output, ensuring clarity and consistency.
-
----
+-   **Agent-Based Architecture**: Create multiple, specialized agents that can be extended with unique behaviors.
+-   **Model Agnostic**: Easily integrate with various LLM providers (OpenAI, Anthropic, Groq, etc.). A list of supported models is available in the `models` folder.
+-   **Tool Integration**: Extend agents' capabilities by giving them tools to interact with external systems.
+-   **Stateful Conversations**: Manages conversational state and history through Threads.
+-   **Persistent Memory**: Pluggable storage adapters allow for long-term memory.
+-   **Real-time Sessions**: Built-in support for real-time voice conversations.
 
 ## Installation
-
-Install Symposium via npm:
 
 ```bash
 npm install symposium
 ```
 
----
+## Core Concepts
 
-## Usage
+The framework is built around a few core components:
 
-Below is a basic example of how to create a custom agent using Symposium:
+-   **`Symposium`**: A static class that acts as the central hub. It's responsible for loading models and initializing the storage adapter.
+-   **`Agent`**: The heart of the framework. An `Agent` is an autonomous entity with a specific goal. You extend this class to define your agent's unique prompt, behavior, and tools.
+-   **`Thread`**: Represents a single conversation with an agent. It maintains the message history and the agent's state for that conversation. Each thread has a unique ID.
+-   **`Tool`**: A base class for creating tools that an `Agent` can use. Tools expose functions that the LLM can call to interact with external APIs or data.
+-   **`Message`**: A wrapper for messages within a `Thread`, containing the role (`user`, `assistant`, `system`, `tool`), content, and other metadata.
 
-```js
-import { Symposium, Agent } from 'symposium';
+## Getting Started
 
-class MyAgent extends Agent {
-  constructor(options = {}) {
-    super(options);
-    this.name = 'MyAgent';
-  }
+Here's a simple example of how to create a basic chat agent.
 
-  async doInitThread(thread) {
-    await thread.addMessage('system', 'Welcome! How can I assist you today?');
-  }
+### 1. Initialize Symposium
+
+First, you need to initialize `Symposium`. This will load all the available models. You can also provide a storage adapter for persistence.
+
+```javascript
+// index.js
+import { Symposium } from 'symposium';
+
+async function main() {
+	await Symposium.init(); // You can pass a storage adapter here
+	// ... your agent code
 }
 
-(async () => {
-  const myAgent = new MyAgent();
-  await myAgent.init();
-  
-  const thread = await myAgent.getThread('example-thread');
-  await myAgent.message(thread, 'default', 'Hello, agent!');
-})();
+main();
 ```
 
----
+### 2. Create your Agent
 
-## Architecture
+Create a new class that extends `Agent`. At a minimum, you'll want to define a name and a system prompt.
 
-Symposium is built around several core components:
+```javascript
+// MyChatAgent.js
+import { Agent } from 'symposium';
 
-- **Agent**: The base class for creating agents. Agents process messages, manage threads, and interact with tools.
-- **Tool**: Extend functionality by integrating custom functions. Tools define their own functions and provide implementations through the `callFunction` method.
-- **Thread**: Represents a conversation, handling message storage, state management, and persistence.
-- **Logger & MemoryHandler**: Utilities for logging events and managing conversation memory, respectively.
-- **Summarizer**: A specialized memory handler that summarizes conversation threads to maintain context within token limits.
-- **Interface**: Abstracts output and error handling, enabling custom integrations with external systems.
+export default class MyChatAgent extends Agent {
+	name = 'MyChatAgent';
+	description = 'A simple chat agent.';
 
----
+	async doInitThread(thread) {
+		await thread.addMessage('system', 'You are a helpful assistant.');
+	}
+}
+```
 
-## Supported Models
+### 3. Start a Conversation
 
-Symposium supports a variety of AI models, allowing you to switch between them based on your needs:
+Now you can instantiate your agent and start a conversation.
 
-- **OpenAI Models**:
-    - GPT-3.5-turbo
-    - GPT-4, GPT-4Turbo, GPT-4o
-    - GPT-o1, GPT-o1 mini
-- **Anthropic Models**:
-    - Claude variants (3.5 Sonnet, 3.7 Sonnet, 4 Sonnet, 4 Opus)
-- **Groq Models**:
-    - Llama3, Mixtral8
-- **DeepSeek Models**:
-    - DeepSeekChat, DeepSeekReasoner
-- **Other Models**:
-    - Whisper (for speech-to-text)
+```javascript
+// index.js
+import { Symposium } from 'symposium';
+import MyChatAgent from './MyChatAgent.js';
 
-These models are encapsulated in their own modules, and you can easily switch the active model by updating the conversation thread state.
+async function main() {
+	await Symposium.init();
 
----
+	const agent = new MyChatAgent();
+	await agent.init();
 
-## Extending Symposium
+	const emitter = await agent.message('Hello, who are you?');
 
-Symposium is designed to be extended and customized:
+	emitter.on('data', (data) => {
+		if (data.type === 'output') {
+			process.stdout.write(data.content);
+		}
+	});
 
-- **Creating Custom Agents**: Inherit from the `Agent` class and override methods like `doInitThread` and `message` to implement custom behavior.
-- **Implementing Tools**: Build your own tools by extending the `Tool` class. Define the functions your tool exposes and provide implementations via `callFunction`.
-- **Custom Memory Handlers & Loggers**: Implement your own memory or logging strategies by creating classes that adhere to the respective interfaces.
-- **Defining Interfaces**: Customize output and error handling by implementing your own `Interface` classes.
+	emitter.on('end', () => {
+		console.log('\nConversation ended.');
+	});
+}
 
----
+main();
+```
 
-## Examples
+When you run this, the agent will respond to your message, and the response will be streamed to the console. The `message` method returns an `EventEmitter` that emits `data` events for text chunks, partial tool usage, and the final response object.
 
-The repository includes an `examples` folder with sample implementations demonstrating:
+## Advanced Usage
 
-- **ChatAgent**: A basic conversational agent.
-- **MultiAgent**: An agent that coordinates with other agents via internal interfaces.
-- **TitlerAgent**: An agent that generates concise titles for conversations.
-- **Tools**: Examples like `GenericTool` and `MultiAgentTool` show how to integrate custom functionality.
+### Using Tools
 
-> **Important:** The content in the `examples` folder is provided solely for demo purposes and will not be part of the exported npm package. You can use these examples as a guide for building your own implementations.
+Tools allow your agent to interact with the outside world. To create a tool, extend the `Tool` class and define one or more functions.
 
----
+#### 1. Create a Tool
 
-## Contributing
+Here's an example of a tool that can get the current weather.
 
-Contributions to Symposium are welcome! If you have ideas, improvements, or bug fixes, please fork the repository and submit a pull request.
+```javascript
+// WeatherTool.js
+import { Tool } from 'symposium';
 
----
+export default class WeatherTool extends Tool {
+	name = 'WeatherTool';
+
+	async getFunctions() {
+		return [
+			{
+				name: 'get_weather',
+				description: 'Get the current weather for a specific city',
+				parameters: {
+					type: 'object',
+					properties: {
+						city: {
+							type: 'string',
+							description: 'The city name',
+						},
+					},
+					required: ['city'],
+				},
+			},
+		];
+	}
+
+	async callFunction(thread, name, payload) {
+		if (name === 'get_weather') {
+			const city = payload.city;
+			// In a real app, you would call a weather API here
+			return { temperature: '25°C', condition: 'sunny' };
+		}
+	}
+}
+```
+
+#### 2. Add the Tool to your Agent
+
+Now, add the tool to your agent instance.
+
+```javascript
+// index.js
+import MyChatAgent from './MyChatAgent.js';
+import WeatherTool from './WeatherTool.js';
+
+// ... inside main()
+const agent = new MyChatAgent();
+agent.addTool(new WeatherTool());
+await agent.init();
+
+const emitter = await agent.message("What's the weather like in Paris?");
+// ...
+```
+
+The agent's underlying LLM will now be able to see the `get_weather` function and will call it when appropriate, passing the result back into the conversation.
+
+### Switching Models
+
+You can set a default model for an agent or change it on a per-thread basis.
+
+```javascript
+// Setting a default model for the agent
+class MyAgent extends Agent {
+    default_model = 'claude-3-5-sonnet';
+    //...
+}
+
+// Changing the model for a specific thread
+const thread = await agent.getThread('thread-id');
+await agent.setModel(thread, 'gpt-3.5-turbo');
+```
+
+The model label must be one of the models available in the `models` directory.
+
+### Persistence
+
+Symposium can persist thread state and messages if you provide a storage adapter. The adapter must implement three methods: `init()`, `get(key)`, and `set(key, value)`.
+
+```javascript
+// MySimpleFileStorage.js
+import fs from 'fs/promises';
+
+class MySimpleFileStorage {
+    async init() {
+        await fs.mkdir('./storage', { recursive: true });
+    }
+    async get(key) {
+        try {
+            const data = await fs.readFile(`./storage/${key}.json`, 'utf-8');
+            return JSON.parse(data);
+        } catch (e) {
+            return null;
+        }
+    }
+    async set(key, value) {
+        await fs.writeFile(`./storage/${key}.json`, JSON.stringify(value, null, 2));
+    }
+}
+
+// index.js
+await Symposium.init(new MySimpleFileStorage());
+```
+
+With a storage adapter in place, conversations will be saved and loaded automatically based on the thread ID.
+
+### Utility Agents
+
+Besides `chat` agents, you can create `utility` agents. These are designed for specific, one-shot tasks like data extraction or classification, rather than open-ended conversation. They typically return structured JSON.
+
+```javascript
+// TextExtractorAgent.js
+import { Agent } from 'symposium';
+
+export default class TextExtractorAgent extends Agent {
+	name = 'TextExtractorAgent';
+	type = 'utility';
+	utility = {
+		type: 'json',
+		function: {
+			name: 'extract_data',
+			parameters: {
+				type: 'object',
+				properties: {
+					name: { type: 'string' },
+					email: { type: 'string' },
+				},
+				required: ['name', 'email'],
+			},
+		},
+	};
+
+    async doInitThread(thread) {
+        await thread.addMessage('system', 'Extract the name and email from the text.');
+    }
+}
+
+// Usage
+const extractor = new TextExtractorAgent();
+await extractor.init();
+const result = await extractor.message('My name is John Doe and my email is john.doe@example.com');
+console.log(result); // { name: 'John Doe', email: 'john.doe@example.com' }
+```
+
+## API Reference
+
+This is a high-level overview. For details, please refer to the source code.
+
+### `Agent`
+
+-   `constructor(options)`: Creates a new agent. Options can include a `memory_handler` or `logger`.
+-   `init()`: Initializes the agent. Must be called before use.
+-   `addTool(tool)`: Adds a `Tool` instance to the agent.
+-   `message(content, thread)`: Sends a message to the agent. Returns an EventEmitter.
+-   `getThread(id)`: Retrieves a `Thread` instance by its ID.
+-   `setModel(thread, modelLabel)`: Changes the LLM for a specific thread.
+-   `createRealtimeSession(thread_id, options)`: Creates a real-time session for voice interaction.
+
+### `Thread`
+
+-   `constructor(id, agent)`: Creates a new thread.
+-   `addMessage(role, content, name, tags)`: Adds a message to the thread.
+-   `setState(state, save)`: Updates the thread's state object.
+-   `loadState()` / `storeState()`: Manages persistence (used internally).
+
+### `Tool`
+
+-   `getFunctions()`: **Abstract**. Must return an array of function definitions that the LLM can call.
+-   `callFunction(thread, name, payload)`: **Abstract**. Called when the LLM decides to use one of the tool's functions.
 
 ## License
 
-Symposium is released under the ISC License.
-
----
-
-For more details or to report issues, please refer to the repository's issue tracker. Enjoy building your AI-driven applications with Symposium!
+ISC

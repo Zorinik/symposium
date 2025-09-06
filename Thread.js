@@ -7,18 +7,15 @@ export default class Thread {
 	agent;
 	messages = [];
 	state = {};
-	interface = null;
 
-	constructor(id, i, agent) {
+	constructor(id, agent) {
 		this.id = id;
-		this.unique = agent.name + '-' + i + '-' + id;
+		this.unique = agent.name + '-' + id;
 		this.agent = agent;
-		this.interface = i;
 	}
 
 	clone(keepMessages = true) {
-		let newThread = new Thread(this.id, this.interface, this.agent);
-		newThread.interface = this.interface;
+		let newThread = new Thread(this.id, this.agent);
 		newThread.state = this.state;
 		if (keepMessages)
 			newThread.messages = [...this.messages];
@@ -27,7 +24,7 @@ export default class Thread {
 
 	changeId(id) {
 		this.id = id;
-		this.unique = this.agent.name + '-' + this.interface + '-' + id;
+		this.unique = this.agent.name + '-' + id;
 	}
 
 	async flush() {
