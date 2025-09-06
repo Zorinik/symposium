@@ -414,7 +414,13 @@ export default class Agent {
 		return [this.name];
 	}
 
-	async createRealtimeSession(thread_id = null, interface_name = 'default') {
+	async createRealtimeSession(thread_id = null, interface_name = 'default', options = {}) {
+		options = {
+			include_thread: true,
+			language: 'it',
+			...options,
+		};
+
 		// Se viene passato un thread esistente, lo si usa, altrimenti si crea un nuovo thread temporaneo
 		const thread = await this.getThread(thread_id || uuid(), interface_name);
 
@@ -427,7 +433,7 @@ export default class Agent {
 		}
 
 		let instructions = system_message.join('\n');
-		if (conversation.length)
+		if (conversation.length && options.include_thread)
 			instructions += '\n\n# Ecco la tua conversazione fino ad ora: #\n' + conversation.join('\n');
 
 		const tools = (await this.getFunctions()).map(t => ({
@@ -445,6 +451,10 @@ export default class Agent {
 				model: 'gpt-realtime',
 				instructions,
 				tools,
+				input_audio_transcription: {
+					model: 'gpt-4o-transcribe',
+					language: options.language,
+				},
 			}),
 		}).then(response => response.json());
 
