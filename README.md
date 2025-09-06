@@ -13,9 +13,21 @@ Symposium is a powerful and flexible Node.js framework for building Large Langua
 
 ## Installation
 
+Requires Node.js v18 or higher.
+
 ```bash
 npm install symposium
 ```
+
+## Configuration
+
+Symposium uses environment variables to configure access to various services. You can set these in a `.env` file at the root of your project.
+
+-   `OPENAI_API_KEY`: Required for using OpenAI models and for Real-time Voice Sessions.
+-   `ANTHROPIC_API_KEY`: Required for using Anthropic models.
+-   `GROQ_API_KEY`: Required for using Groq models.
+-   `DEEPSEEK_API_KEY`: Required for using DeepSeek models.
+-   `TRANSCRIPTION_MODEL`: (Optional) The name of the model to use for audio transcription (e.g., `whisper`). Defaults to OpenAI's Whisper if not set.
 
 ## Core Concepts
 
@@ -26,6 +38,9 @@ The framework is built around a few core components:
 -   **`Thread`**: Represents a single conversation with an agent. It maintains the message history and the agent's state for that conversation. Each thread has a unique ID.
 -   **`Tool`**: A base class for creating tools that an `Agent` can use. Tools expose functions that the LLM can call to interact with external APIs or data.
 -   **`Message`**: A wrapper for messages within a `Thread`, containing the role (`user`, `assistant`, `system`, `tool`), content, and other metadata.
+-   **`MemoryHandler`**: A class for managing an agent's long-term memory. It can be extended to create custom memory strategies.
+-   **`Summarizer`**: A utility agent for summarizing text or conversations.
+-   **`Logger`**: A simple logging utility that can be passed to an agent to log its activity.
 
 ## Getting Started
 
@@ -85,12 +100,25 @@ async function main() {
 	emitter.on('output', (content) => {
 		process.stdout.write(content);
 	});
+
+	emitter.on('error', (error) => {
+		console.error(`\nAn error occurred: ${error.message}`);
+	});
+
+	emitter.on('partial', (text) => {
+		console.log(`\n> ${text}\n`);
+	});
 }
 
 main();
 ```
 
-When you run this, the agent will respond to your message, and the response will be streamed to the console. The `message` method returns an `EventEmitter` that emits `data` events for text chunks, partial tool usage, and the final response object.
+When you run this, the agent will respond to your message, and the response will be streamed to the console. The `message` method returns an `EventEmitter` that emits several events:
+
+-   `start`: Emitted when the agent begins processing the message. The `thread` object is passed as an argument.
+-   `output`: Emitted for each chunk of text in the response stream.
+-   `partial`: Emitted to provide insight into the agent's internal state, like when it decides to use a tool.
+-   `error`: Emitted if an error occurs during processing.
 
 ## Advanced Usage
 
@@ -157,6 +185,43 @@ const emitter = await agent.message("What's the weather like in Paris?");
 ```
 
 The agent's underlying LLM will now be able to see the `get_weather` function and will call it when appropriate, passing the result back into the conversation.
+
+### Real-time Voice and Transcription
+
+Symposium has built-in support for audio transcription and real-time voice sessions, currently powered by OpenAI.
+
+#### Audio Transcription
+
+You can send audio content directly in a message. If the model doesn't support audio input, Symposium will automatically transcribe it to text.
+
+```javascript
+// Transcribing an audio file from a URL
+const emitter = await agent.message([
+    {
+        type: 'audio',
+        content: {
+            type: 'url',
+            data: 'http://example.com/audio.mp3'
+        }
+    }
+]);
+```
+
+You can also use the static `Symposium.transcribe()` method for standalone transcription.
+
+#### Real-time Voice Sessions
+
+For interactive voice conversations, you can create a real-time session. This is useful for building voice bots.
+
+```javascript
+// (inside an async function)
+const { response, thread } = await agent.createRealtimeSession();
+const sessionId = response.id;
+const clientSecret = response.client_secret.value;
+
+// You would then use this session ID and client secret on the client-side
+// to connect to the real-time session endpoint.
+```
 
 ### Switching Models
 
@@ -270,6 +335,12 @@ This is a high-level overview. For details, please refer to the source code.
 
 -   `getFunctions()`: **Abstract**. Must return an array of function definitions that the LLM can call.
 -   `callFunction(thread, name, payload)`: **Abstract**. Called when the LLM decides to use one of the tool's functions.
+
+### Other Classes
+
+-   **`MemoryHandler`**: Provides a base for implementing long-term memory for an agent.
+-   **`Summarizer`**: A utility agent for text summarization.
+-   **`Logger`**: A simple logger for agent activity.
 
 ## License
 
