@@ -215,16 +215,10 @@ export default class Agent {
 		if (obj.type !== 'object')
 			return {obj, count: 0};
 
-		let properties_count = 0, all_required = false, required = [];
-		if (obj.required)
-			required = obj.required;
-		else
-			all_required = true;
-
+		let properties_count = 0, required = [];
 		for (let [key, property] of Object.entries(obj.properties || {})) {
 			properties_count++;
-			if (all_required)
-				required.push(key);
+			required.push(key); // OpenAI requires all properties to be required
 
 			if (property.type === 'object') {
 				const {obj: subobj, count} = this.convertFunctionToResponseFormat(property);
