@@ -123,80 +123,91 @@ export default class Agent {
 	async execute(thread, counter = 0, existing_emitter = null) {
 		const emitter = existing_emitter || new BufferedEventEmitter();
 
-		if (counter === 0)
-			thread = await this.beforeExecute(thread, emitter);
+		const execution = new Promise(async (resolve, reject) => {
+			try {
+				if (counter === 0)
+					thread = await this.beforeExecute(thread, emitter);
 
-		const model = Symposium.getModelByName(thread.state.model);
+				const model = Symposium.getModelByName(thread.state.model);
 
-		const completion_options = {};
-		if (this.type === 'utility') {
-			if (['function', 'json'].includes(this.utility.type)) {
-				if (!this.utility.function || !this.utility.function.name || !this.utility.function.parameters)
-					throw new Error('Bad function definition');
+				const completion_options = {};
+				if (this.type === 'utility') {
+					if (['function', 'json'].includes(this.utility.type)) {
+						if (!this.utility.function || !this.utility.function.name || !this.utility.function.parameters)
+							throw new Error('Bad function definition');
 
-				let response_format = null;
-				if (this.utility.type === 'json' && model.supports_structured_output)
-					response_format = this.convertFunctionToResponseFormat(this.utility.function.parameters);
+						let response_format = null;
+						if (this.utility.type === 'json' && model.supports_structured_output)
+							response_format = this.convertFunctionToResponseFormat(this.utility.function.parameters);
 
-				if (response_format && response_format.count <= 100) { // OpenAI does not support structured output if there are more than 100 parameters
-					completion_options.response_format = {
-						type: 'json_schema',
-						json_schema: {
-							name: this.utility.function.name,
-							schema: response_format.obj,
-							strict: true,
-						},
-					};
-				} else {
-					completion_options.functions = [
-						this.utility.function,
-					];
-					completion_options.force_function = this.utility.function.name;
+						if (response_format && response_format.count <= 100) { // OpenAI does not support structured output if there are more than 100 parameters
+							completion_options.response_format = {
+								type: 'json_schema',
+								json_schema: {
+									name: this.utility.function.name,
+									schema: response_format.obj,
+									strict: true,
+								},
+							};
+						} else {
+							completion_options.functions = [
+								this.utility.function,
+							];
+							completion_options.force_function = this.utility.function.name;
+						}
+					}
 				}
+
+				let completion;
+				try {
+					completion = await this.generateCompletion(thread, completion_options);
+				} catch (e) {
+					console.error(e.message);
+					switch (this.type) {
+						case 'chat':
+							emitter.emit('error', e.message);
+							return resolve(e);
+
+						case 'utility':
+							throw e;
+
+						default:
+							throw new Error('Bad agent type');
+					}
+				}
+
+				try {
+					thread = await this.afterExecute(thread, completion, emitter);
+					const response = await this.handleCompletion(thread, completion, emitter);
+
+					switch (this.type) {
+						case 'utility':
+							if (response.type !== 'response')
+								throw new Error('Utility agent did not return a response');
+
+							return resolve(response.value);
+
+						case 'chat':
+							if (response?.type === 'continue')
+								return this.execute(thread, 0, emitter);
+
+							return resolve(null);
+
+						default:
+							throw new Error('Bad agent type');
+					}
+				} catch (e) {
+					console.error(e);
+
+					if (counter < this.max_retries)
+						await this.execute(thread, counter + 1, emitter);
+				}
+			} catch (e) {
+				reject(e);
 			}
-		}
+		});
 
-		let completion;
-		try {
-			completion = await this.generateCompletion(thread, completion_options);
-		} catch (e) {
-			console.error(e.message);
-			switch (this.type) {
-				case 'chat':
-					emitter.emit('error', e.message);
-					return emitter;
-
-				case 'utility':
-					throw e;
-
-				default:
-					throw new Error('Bad agent type');
-			}
-		}
-
-		try {
-			thread = await this.afterExecute(thread, completion, emitter);
-			const response = await this.handleCompletion(thread, completion, emitter);
-
-			switch (this.type) {
-				case 'utility':
-					return response;
-
-				case 'chat':
-					if (response.type === 'continue')
-						return this.execute(thread, 0, emitter);
-
-					return emitter;
-
-				default:
-					throw new Error('Bad agent type');
-			}
-		} catch (e) {
-			console.error(e);
-
-			if (counter < this.max_retries)
-				await this.execute(thread, counter + 1, emitter);
-		}
+		return this.type === 'chat' ? emitter : execution;
 	}
 
 	convertFunctionToResponseFormat(obj) {
@@ -307,9 +318,9 @@ export default class Agent {
 					case 'text':
 						if (this.type === 'utility') {
 							if (this.utility.type === 'text')
-								return this.afterHandle(thread, completion, m.content);
+								return {type: 'response', value: this.afterHandle(thread, completion, m.content)};
 							if (this.utility.type === 'json' && model.supports_structured_output)
-								return this.afterHandle(thread, completion, JSON.parse(m.content));
+								return {type: 'response', value: this.afterHandle(thread, completion, JSON.parse(m.content))};
 						}
 
 						emitter.emit('output', m.content);
@@ -326,24 +337,26 @@ export default class Agent {
 		if (functions.length) {
 			for (let f of functions) {
 				if (this.utility && ['function', 'json'].includes(this.utility.type))
-					return this.afterHandle(thread, completion, f.arguments);
+					return {type: 'response', value: this.afterHandle(thread, completion, f.arguments)};
 
 				const function_response = await this.callFunction(thread, f, emitter);
 
 				thread.addMessage('tool', [
 					{
 						type: 'function_response',
-						content: {name: f.name, function_response, id: f.id || undefined},
+						content: {name: f.name, response: function_response, id: f.id || undefined},
 					},
 				], f.name);
 
 				await this.log('function_response', function_response);
 			}
 
-			return this.afterHandle(thread, completion);
+			await this.afterHandle(thread, completion);
+			return {type: 'continue'};
 		} else {
 			await thread.storeState();
-			return this.afterHandle(thread, completion);
+			await this.afterHandle(thread, completion);
+			return {type: 'void'};
 		}
 	}
 
