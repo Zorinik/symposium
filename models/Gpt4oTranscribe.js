@@ -1,8 +1,8 @@
 import OpenAIModel from "./OpenAIModel.js";
 
-export default class Whisper extends OpenAIModel {
+export default class Gpt4oTranscribe extends OpenAIModel {
 	type = 'stt';
-	name = 'whisper';
+	name = 'gpt4o-transcribe';
 
 	async transcribe(file, prompt = null) {
 		const response = await this.getOpenAi().audio.transcriptions.create({

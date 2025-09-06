@@ -27,7 +27,7 @@ Symposium uses environment variables to configure access to various services. Yo
 -   `ANTHROPIC_API_KEY`: Required for using Anthropic models.
 -   `GROQ_API_KEY`: Required for using Groq models.
 -   `DEEPSEEK_API_KEY`: Required for using DeepSeek models.
--   `TRANSCRIPTION_MODEL`: (Optional) The name of the model to use for audio transcription (e.g., `whisper`). Defaults to OpenAI's Whisper if not set.
+-   `TRANSCRIPTION_MODEL`: (Optional) The name of the model to use for audio transcription (currently, only `gpt4o-transcribe` is supported).
 
 ## Core Concepts
 
