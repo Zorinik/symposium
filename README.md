@@ -82,14 +82,8 @@ async function main() {
 
 	const emitter = await agent.message('Hello, who are you?');
 
-	emitter.on('data', (data) => {
-		if (data.type === 'output') {
-			process.stdout.write(data.content);
-		}
-	});
-
-	emitter.on('end', () => {
-		console.log('\nConversation ended.');
+	emitter.on('output', (content) => {
+		process.stdout.write(content);
 	});
 }
 

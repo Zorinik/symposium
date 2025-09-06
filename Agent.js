@@ -175,7 +175,7 @@ export default class Agent {
 		}
 
 		try {
-			thread = await this.afterExecute(thread, completion);
+			thread = await this.afterExecute(thread, completion, emitter);
 			const response = await this.handleCompletion(thread, completion, emitter);
 
 			switch (this.type) {
@@ -183,12 +183,8 @@ export default class Agent {
 					return response;
 
 				case 'chat':
-					if (!existing_emitter) {
-						emitter.on('data', data => {
-							if (data.type === 'response' && data.content.type === 'continue')
-								this.execute(thread, 0, emitter);
-						}, false);
-					}
+					if (response.type === 'continue')
+						return this.execute(thread, 0, emitter);
 
 					return emitter;
 
@@ -242,7 +238,7 @@ export default class Agent {
 		};
 	}
 
-	async afterExecute(thread, completion) {
+	async afterExecute(thread, completion, emitter) {
 		return thread;
 	}
 
@@ -311,9 +307,9 @@ export default class Agent {
 					case 'text':
 						if (this.type === 'utility') {
 							if (this.utility.type === 'text')
-								return this.afterHandle(thread, completion, 'return', m.content);
+								return this.afterHandle(thread, completion, m.content);
 							if (this.utility.type === 'json' && model.supports_structured_output)
-								return this.afterHandle(thread, completion, 'return', JSON.parse(m.content));
+								return this.afterHandle(thread, completion, JSON.parse(m.content));
 						}
 
 						emitter.emit('output', m.content);
@@ -330,7 +326,7 @@ export default class Agent {
 		if (functions.length) {
 			for (let f of functions) {
 				if (this.utility && ['function', 'json'].includes(this.utility.type))
-					return this.afterHandle(thread, completion, 'return', f.arguments);
+					return this.afterHandle(thread, completion, f.arguments);
 
 				const function_response = await this.callFunction(thread, f, emitter);
 
@@ -344,18 +340,15 @@ export default class Agent {
 				await this.log('function_response', function_response);
 			}
 
-			return this.afterHandle(thread, completion, 'continue');
+			return this.afterHandle(thread, completion);
 		} else {
 			await thread.storeState();
-			return this.afterHandle(thread, completion, 'void');
+			return this.afterHandle(thread, completion);
 		}
 	}
 
-	async afterHandle(thread, completion, type, value = null) {
-		return {
-			type,
-			value,
-		};
+	async afterHandle(thread, completion, value = null) {
+		return value;
 	}
 
 	async getFunctions(parsed = true) {
