@@ -359,6 +359,10 @@ export default class Agent {
 		return value;
 	}
 
+	getEmitter() {
+		return new BufferedEventEmitter();
+	}
+
 	async getFunctions(parsed = true) {
 		if (this.functions === null) {
 			this.functions = new Map();
@@ -382,23 +386,26 @@ export default class Agent {
 			return this.functions;
 	}
 
-	async callFunction(thread, function_call, emitter) {
+	async callFunction(thread, function_call, emitter = null) {
 		const functions = await this.getFunctions(false);
 		if (!functions.has(function_call.name))
 			throw new Error('Unrecognized function ' + function_call.name);
 
 		const func = functions.get(function_call.name);
 		const partialOutput = func.partialOutput ? ((typeof func.partialOutput) === 'text' ? func.partialOutput : func.partialOutput.call(this, function_call.arguments)) : 'Uso lo strumento ' + function_call.name + '...';
-		emitter.emit('partial', partialOutput);
+		if (emitter)
+			emitter.emit('partial', partialOutput);
 
 		await this.log('function_call', function_call);
 
 		try {
 			const response = await func.tool.callFunction(thread, function_call.name, function_call.arguments);
-			emitter.emit('partial', 'Risposta ricevuta da ' + func.tool.name);
+			if (emitter)
+				emitter.emit('partial', 'Risposta ricevuta da ' + func.tool.name);
 			return response;
 		} catch (error) {
-			emitter.emit('partial', 'Ricevuto errore da ' + func.tool.name);
+			if (emitter)
+				emitter.emit('partial', 'Ricevuto errore da ' + func.tool.name);
 			return {error};
 		}
 	}
