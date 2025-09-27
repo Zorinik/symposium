@@ -38,7 +38,7 @@ The framework is built around a few core components:
 -   **`Thread`**: Represents a single conversation with an agent. It maintains the message history and the agent's state for that conversation. Each thread has a unique ID.
 -   **`Tool`**: A base class for creating tools that an `Agent` can use. Tools expose functions that the LLM can call to interact with external APIs or data.
 -   **`Message`**: A wrapper for messages within a `Thread`, containing the role (`user`, `assistant`, `system`, `tool`), content, and other metadata.
--   **`MemoryHandler`**: A class for managing an agent's long-term memory. It can be extended to create custom memory strategies.
+-   **`ContextHandler`**: A class for managing an agent's long contexts. It can be extended to create custom memory strategies.
 -   **`Summarizer`**: A utility agent for summarizing text or conversations.
 -   **`Logger`**: A simple logging utility that can be passed to an agent to log its activity.
 
@@ -338,7 +338,7 @@ This is a high-level overview. For details, please refer to the source code.
 
 ### Other Classes
 
--   **`MemoryHandler`**: Provides a base for implementing long-term memory for an agent.
+-   **`ContextHandler`**: Provides a base for managing long-term context. Can be extended for custom memory strategies.
 -   **`Summarizer`**: A utility agent for text summarization.
 -   **`Logger`**: A simple logger for agent activity.
 

@@ -1,4 +1,4 @@
-export default class MemoryHandler {
+export default class ContextHandler {
 	agent = null;
 
 	setAgent(agent) {

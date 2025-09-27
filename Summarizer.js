@@ -1,7 +1,7 @@
 import Symposium from "./Symposium.js";
-import MemoryHandler from "./MemoryHandler.js";
+import ContextHandler from "./ContextHandler.js";
 
-export default class Summarizer extends MemoryHandler {
+export default class Summarizer extends ContextHandler {
 	constructor(threshold = 0.7, summary_length = 0.5) {
 		super();
 		this.threshold = threshold;

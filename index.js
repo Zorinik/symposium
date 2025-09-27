@@ -5,7 +5,7 @@ import Agent from "./Agent.js";
 import Thread from "./Thread.js";
 import Tool from "./Tool.js";
 import Logger from "./Logger.js";
-import MemoryHandler from "./MemoryHandler.js";
+import ContextHandler from "./ContextHandler.js";
 import Summarizer from "./Summarizer.js";
 
 export {
@@ -14,6 +14,6 @@ export {
 	Thread,
 	Tool,
 	Logger,
-	MemoryHandler,
+	ContextHandler,
 	Summarizer,
 };
