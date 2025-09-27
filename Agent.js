@@ -64,6 +64,19 @@ export default class Agent {
 		this.tools.set(tool.name, tool);
 	}
 
+	static async oneShot(system, prompt, options = {}) {
+		const agent = new this(options.agent || {});
+		agent.type = 'utility';
+		agent.utility = options.response || {
+			type: 'text',
+		};
+
+		const thread = new Thread(uuid(), agent);
+		await thread.addMessage('system', system);
+
+		return agent.message(prompt, thread);
+	}
+
 	async initThread(thread) {
 		await this.doInitThread(thread);
 		await thread.storeState();
