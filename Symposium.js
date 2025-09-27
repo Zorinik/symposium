@@ -2,6 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import {fileURLToPath} from 'url';
 
+import Agent from "./Agent.js";
+
 export default class Symposium {
 	static models = new Map();
 	static storage = null;
@@ -112,5 +114,20 @@ export default class Symposium {
 		};
 
 		return mimeToExt[mime] || null;
+	}
+
+	static async oneShot(system, prompt, options = {}) {
+		const agent = new Agent(options.agent || {});
+		agent.type = 'utility';
+		agent.utility = options.response || {
+			type: 'text',
+		};
+
+		agent.doInitThread = async thread => {
+			await thread.addMessage('system', system);
+		};
+
+		const thread = await agent.getThread();
+		return agent.message(prompt, thread);
 	}
 }
