@@ -7,10 +7,10 @@
   "author": "Domenico Giambra",
   "license": "ISC",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.60.0",
-    "groq-sdk": "^0.30.0",
+    "@anthropic-ai/sdk": "^0.64.0",
+    "groq-sdk": "^0.32.0",
     "openai": "^5.0.0",
     "tiktoken": "^1.0.10",
-    "uuid": "^11.1.0"
+    "uuid": "^13.0.0"
   }
 }
