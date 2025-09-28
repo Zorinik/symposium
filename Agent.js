@@ -4,6 +4,8 @@ import BufferedEventEmitter from "./BufferedEventEmitter.js";
 
 import Symposium from "./Symposium.js";
 import Thread from "./Thread.js";
+import Tool from "./Tool.js";
+import Context from "./Context.js";
 
 export default class Agent {
 	name = 'Agent';
@@ -12,6 +14,7 @@ export default class Agent {
 	threads;
 	functions = null;
 	tools = new Map();
+	context = [];
 	default_model = 'gpt-4o';
 	max_retries = 5;
 	type = 'chat'; // chat, utility
@@ -61,11 +64,48 @@ export default class Agent {
 	}
 
 	addTool(tool) {
+		if (!(tool instanceof Tool) || !tool.name)
+			throw new Error('Tool must be an instance of Tool class');
+		if (this.tools.has(tool.name))
+			throw new Error('Tool with name ' + tool.name + ' already exists in agent');
+
 		this.tools.set(tool.name, tool);
+	}
+
+	addContext(context) {
+		if (!(context instanceof Context))
+			throw new Error('Context must be an instance of Context class');
+
+		// TODO: on-request contexts
+		// TODO: summarization based on tokens
+		// TODO: RAG
+
+		this.context.push(context);
 	}
 
 	async initThread(thread) {
 		await this.doInitThread(thread);
+
+		const context_texts = [];
+		for (let context of this.context) {
+			const text = await context.getText();
+			if (text)
+				context_texts.push('<context>' + text + '</context>');
+		}
+
+		if (context_texts.length) {
+			let system_message_found = null;
+			for (let messages of thread.messages) {
+				if (messages.role === 'system')
+					system_message_found = messages;
+			}
+
+			if (system_message_found)
+				system_message_found.content[0].content += '<context_info>' + context_texts.join('\n') + '</context_info>';
+			else
+				thread.addMessage('system', '<context_info>' + context_texts.join('\n') + '</context_info>');
+		}
+
 		await thread.storeState();
 	}
 
