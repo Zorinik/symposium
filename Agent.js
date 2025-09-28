@@ -118,7 +118,7 @@ export default class Agent {
 		if (context_texts.length) {
 			let context_string = context_texts.join('\n');
 			if (is_there_on_request) {
-				context_string = '<important>Some of the context is available to you immediately here, while longer texts may be available only on request; you are provided with a title and a description. If you think it may be useful for your current task, you can request the text via the get_context tool</important>';
+				context_string = '<important>Some of the context files are available to you immediately here, while longer texts may be available only on request; you are provided with a title and a description of these files. If you think it may be useful for your current task, you can request the text via the get_context tool - IMPORTANT: use the title of the file verbatim as it is provided</important>' + context_string;
 				if (!this.tools.has('get_context'))
 					this.addTool(new GetContextTool(this));
 			}
