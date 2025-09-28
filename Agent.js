@@ -273,8 +273,13 @@ export default class Agent {
 				} catch (e) {
 					console.error(e);
 
-					if (counter < this.max_retries)
-						await this.execute(thread, emitter, counter + 1);
+					if (counter < this.max_retries) {
+						await this.execute(thread, emitter, counter + 1)
+							.then(response => resolve(response))
+							.catch(err => reject(err));
+					} else {
+						throw e;
+					}
 				}
 			} catch (e) {
 				reject(e);
