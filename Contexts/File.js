@@ -7,6 +7,13 @@ export default class File extends Context {
 		this.file = file;
 	}
 
+	async getTitle() {
+		if (this.file.startsWith('http://') || this.file.startsWith('https://'))
+			return this.file;
+		else
+			return this.file.split('/').pop();
+	}
+
 	async getText() {
 		if (this.file.startsWith('http://') || this.file.startsWith('https://')) {
 			return fetch(this.file);

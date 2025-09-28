@@ -73,30 +73,53 @@ export default class Agent {
 		this.tools.set(tool.name, tool);
 	}
 
-	addContext(context) {
+	async addContext(context, options = {}) {
 		if (typeof context === 'string')
 			context = new Text(context);
 		if (!(context instanceof Context))
 			throw new Error('Context must be an instance of Context class');
 
-		// TODO: on-request contexts
+		options = {
+			type: 'always', // always, on_request
+			description: null,
+			...options,
+		};
+
 		// TODO: summarization based on tokens
 		// TODO: RAG
 
-		this.context.push(context);
+		const title = await context.getTitle();
+		this.context.push({title, context, options});
 	}
 
 	async initThread(thread) {
 		await this.doInitThread(thread);
 
-		const context_texts = [];
-		for (let context of this.context) {
-			const text = await context.getText();
-			if (text)
-				context_texts.push('<context>' + text + '</context>');
+		let context_texts = [], is_there_on_request = false;
+		for (let {title, context, options} of this.context) {
+			switch (options.type) {
+				case 'always':
+					const text = await context.getText();
+					if (text)
+						context_texts.push('<context>' + text + '</context>');
+					break;
+
+				case 'on_request':
+					is_there_on_request = true;
+					context_texts.push('<context_on_request><name>' + title + '</name><description>' + options.description + '</description></context_on_request>');
+					break;
+
+				default:
+					throw new Error('Bad context option type ' + options.type);
+			}
 		}
 
 		if (context_texts.length) {
+			let context_string = context_texts.join('\n');
+			if (is_there_on_request) // TODO: get_context tool
+				context_string = '<important>Some of the context is available to you immediately here, while longer texts may be available only on request; you are provided with a title and a description. If you think it may be useful for your current task, you can request the text via the get_context tool</important>';
+			context_string = '\n<context_info>' + context_string + '</context_info>';
+
 			let system_message_found = null;
 			for (let messages of thread.messages) {
 				if (messages.role === 'system')
@@ -104,9 +127,9 @@ export default class Agent {
 			}
 
 			if (system_message_found)
-				system_message_found.content[0].content += '<context_info>' + context_texts.join('\n') + '</context_info>';
+				system_message_found.content[0].content += context_string;
 			else
-				thread.addMessage('system', '<context_info>' + context_texts.join('\n') + '</context_info>');
+				thread.addMessage('system', context_string);
 		}
 
 		await thread.storeState();
