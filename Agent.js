@@ -7,6 +7,7 @@ import Thread from "./Thread.js";
 import Tool from "./Tool.js";
 import Context from "./Context.js";
 import Text from "./Contexts/Text.js";
+import GetContextTool from "./GetContextTool.js";
 
 export default class Agent {
 	name = 'Agent';
@@ -116,8 +117,11 @@ export default class Agent {
 
 		if (context_texts.length) {
 			let context_string = context_texts.join('\n');
-			if (is_there_on_request) // TODO: get_context tool
+			if (is_there_on_request) {
 				context_string = '<important>Some of the context is available to you immediately here, while longer texts may be available only on request; you are provided with a title and a description. If you think it may be useful for your current task, you can request the text via the get_context tool</important>';
+				if (!this.tools.has('get_context'))
+					this.addTool(new GetContextTool(this));
+			}
 			context_string = '\n<context_info>' + context_string + '</context_info>';
 
 			let system_message_found = null;
