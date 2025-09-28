@@ -6,6 +6,7 @@ import Symposium from "./Symposium.js";
 import Thread from "./Thread.js";
 import Tool from "./Tool.js";
 import Context from "./Context.js";
+import Text from "./Contexts/Text.js";
 
 export default class Agent {
 	name = 'Agent';
@@ -73,6 +74,8 @@ export default class Agent {
 	}
 
 	addContext(context) {
+		if (typeof context === 'string')
+			context = new Text(context);
 		if (!(context instanceof Context))
 			throw new Error('Context must be an instance of Context class');
 
