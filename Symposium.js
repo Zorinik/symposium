@@ -116,7 +116,7 @@ export default class Symposium {
 		return mimeToExt[mime] || null;
 	}
 
-	static async oneShot(system, prompt, options = {}) {
+	static async prompt(system, prompt, options = {}) {
 		const agent = new Agent(options.agent || {});
 		agent.type = 'utility';
 		agent.utility = options.response || {
