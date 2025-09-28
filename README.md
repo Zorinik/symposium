@@ -62,9 +62,41 @@ async function main() {
 main();
 ```
 
-### 2. Create your Agent
+### 2. One shot prompts
 
-Create a new class that extends `Agent`. At a minimum, you'll want to define a name and a system prompt.
+You can also use the static `Symposium.prompt()` method for one-off prompts without creating an agent.
+
+```javascript
+import { Symposium } from 'symposium';
+await Symposium.init();
+
+const response = await Symposium.prompt('Translate the text from English to French.', 'Hello, how are you?');
+console.log(response); // "Bonjour, comment ça va?"
+
+const structured_response = await Symposium.prompt('Extract name and emails from the following email', email_text, {
+	response: {
+		type: 'json',
+        function: {
+            name: 'extract_data',
+            parameters: {
+                type: 'array',
+                items: {
+	                type: 'object',
+	                properties: {
+		                name: {type: 'string'},
+		                email: {type: 'string'},
+	                },
+	                required: ['name', 'email'],
+                },
+            },
+        },
+    },
+});
+```
+
+### 3. Create your Agent
+
+For more structured and/or reusable tasks, create a new class that extends `Agent`. At a minimum, you'll want to define a name and a system prompt.
 
 ```javascript
 // MyChatAgent.js
@@ -80,7 +112,7 @@ export default class MyChatAgent extends Agent {
 }
 ```
 
-### 3. Start a Conversation
+### 4. Start a Conversation
 
 Now you can instantiate your agent and start a conversation.
 
