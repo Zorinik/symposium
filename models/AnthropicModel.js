@@ -30,7 +30,12 @@ export default class AnthropicModel extends Model {
 		const completion_payload = {
 			model: this.name,
 			system,
-			max_tokens: 4096,
+			max_tokens: 16000,
+			thinking: {
+				type: "enabled",
+				budget_tokens: 10000,
+			},
+			betas: ["interleaved-thinking-2025-05-14"],
 			messages,
 			tools: functions.map(f => ({
 				name: f.name,
