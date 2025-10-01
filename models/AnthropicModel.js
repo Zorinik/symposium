@@ -78,7 +78,7 @@ export default class AnthropicModel extends Model {
 					case 'thinking':
 						message_content.push({
 							type: 'reasoning',
-							content: message,
+							content: message.original,
 						});
 						break;
 
@@ -173,8 +173,9 @@ export default class AnthropicModel extends Model {
 
 						case 'reasoning':
 							content.push({
-								...c,
 								type: 'thinking',
+								content: c.thinking,
+								original: c,
 							});
 							break;
 
