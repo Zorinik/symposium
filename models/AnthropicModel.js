@@ -52,7 +52,7 @@ export default class AnthropicModel extends Model {
 			};
 		}
 
-		const message = await this.getAnthropic().messages.create(completion_payload);
+		const message = await this.getAnthropic().beta.messages.create(completion_payload);
 
 		const message_content = [];
 		if (message.content) {
@@ -72,6 +72,13 @@ export default class AnthropicModel extends Model {
 									arguments: m.input,
 								},
 							],
+						});
+						break;
+
+					case 'thinking':
+						message_content.push({
+							type: 'reasoning',
+							content: message,
 						});
 						break;
 
@@ -162,6 +169,13 @@ export default class AnthropicModel extends Model {
 							} else {
 								throw new Error('Audio content is not supported by this model');
 							}
+							break;
+
+						case 'reasoning':
+							content.push({
+								...c,
+								type: 'thinking',
+							});
 							break;
 
 						default:
