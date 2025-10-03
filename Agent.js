@@ -252,6 +252,14 @@ export default class Agent {
 
 				try {
 					thread = await this.afterExecute(thread, completion, emitter);
+
+					for (let message of completion) {
+						if (message.role === 'assistant' && message.content.some(c => c.type === 'reasoning')) {
+							const reasoning = message.content.find(c => c.type === 'reasoning').content;
+							emitter.emit('reasoning', reasoning);
+						}
+					}
+
 					const response = await this.handleCompletion(thread, completion, emitter);
 
 					switch (this.type) {
