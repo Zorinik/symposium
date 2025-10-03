@@ -14,84 +14,97 @@ export default class AnthropicModel extends Model {
 	}
 
 	async generate(thread, functions = [], options = {}) {
-		const parsed = this.parseOptions(options, functions);
-		options = parsed.options;
-		functions = parsed.functions;
+		try {
+			const parsed = this.parseOptions(options, functions);
+			options = parsed.options;
+			functions = parsed.functions;
 
-		let [system, messages] = await this.convertMessages(thread);
+			let [system, messages] = await this.convertMessages(thread);
 
-		if (functions.length && !this.supports_functions) {
-			// Se il modello non supporta nativamente le funzioni, aggiungo il prompt al messaggio di sistema
-			const functions_prompt = this.promptFromFunctions(options, functions);
-			system += "\n\n" + functions_prompt;
-			functions = [];
-		}
+			if (functions.length && !this.supports_functions) {
+				// Se il modello non supporta nativamente le funzioni, aggiungo il prompt al messaggio di sistema
+				const functions_prompt = this.promptFromFunctions(options, functions);
+				system += "\n\n" + functions_prompt;
+				functions = [];
+			}
 
-		const completion_payload = {
-			model: this.name,
-			system,
-			max_tokens: 16000,
-			thinking: {
-				type: "enabled",
-				budget_tokens: 10000,
-			},
-			betas: ["interleaved-thinking-2025-05-14"],
-			messages,
-			tools: functions.map(f => ({
-				name: f.name,
-				description: f.description,
-				input_schema: f.parameters,
-				required: f.required || undefined,
-			})),
-		};
-
-		if (options.force_function) {
-			completion_payload.tool_choice = {
-				type: 'tool',
-				name: options.force_function,
+			const completion_payload = {
+				model: this.name,
+				system,
+				max_tokens: 16000,
+				thinking: {
+					type: "enabled",
+					budget_tokens: 10000,
+				},
+				betas: ["interleaved-thinking-2025-05-14"],
+				messages,
+				tools: functions.map(f => ({
+					name: f.name,
+					description: f.description,
+					input_schema: f.parameters,
+					required: f.required || undefined,
+				})),
 			};
-		}
 
-		const message = await this.getAnthropic().beta.messages.create(completion_payload);
+			if (options.force_function) {
+				completion_payload.tool_choice = {
+					type: 'tool',
+					name: options.force_function,
+				};
+			}
 
-		const message_content = [];
-		if (message.content) {
-			for (let m of message.content) {
-				switch (m.type) {
-					case 'text':
-						message_content.push({type: 'text', content: m.text});
-						break;
+			const message = await this.getAnthropic().beta.messages.create(completion_payload);
 
-					case 'tool_use':
-						message_content.push({
-							type: 'function',
-							content: [
-								{
-									id: m.id,
-									name: m.name,
-									arguments: m.input,
-								},
-							],
-						});
-						break;
+			const message_content = [];
+			if (message.content) {
+				for (let m of message.content) {
+					switch (m.type) {
+						case 'text':
+							message_content.push({type: 'text', content: m.text});
+							break;
 
-					case 'thinking':
-						message_content.push({
-							type: 'reasoning',
-							content: m.thinking,
-							original: m,
-						});
-						break;
+						case 'tool_use':
+							message_content.push({
+								type: 'function',
+								content: [
+									{
+										id: m.id,
+										name: m.name,
+										arguments: m.input,
+									},
+								],
+							});
+							break;
 
-					default:
-						throw new Error('Unrecognized message type in Anthropic response');
+						case 'thinking':
+							message_content.push({
+								type: 'reasoning',
+								content: m.thinking,
+								original: m,
+							});
+							break;
+
+						default:
+							throw new Error('Unrecognized message type in Anthropic response');
+					}
 				}
 			}
-		}
 
-		return [
-			new Message('assistant', message_content),
-		];
+			return [
+				new Message('assistant', message_content),
+			];
+		} catch (e) {
+			if (e.error?.error?.type === 'rate_limit_error') {
+				console.error('Rate limite exceeded for Anthropic API, waiting 60 seconds...');
+				await new Promise(resolve => setTimeout(resolve, 60000));
+				if ((options.counter || 0) < 3)
+					return this.generate(thread, functions, {...options, counter: (options.counter || 0) + 1});
+				else
+					throw new Error('Rate limit exceeded for Anthropic API, aborting.');
+			}
+
+			throw e;
+		}
 	}
 
 	async convertMessages(thread) {
