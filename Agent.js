@@ -470,20 +470,18 @@ export default class Agent {
 			throw new Error('Unrecognized function ' + function_call.name);
 
 		const func = functions.get(function_call.name);
-		const partialOutput = func.partialOutput ? ((typeof func.partialOutput) === 'text' ? func.partialOutput : func.partialOutput.call(this, function_call.arguments)) : 'Uso lo strumento ' + function_call.name + '...';
-		if (emitter)
-			emitter.emit('partial', partialOutput);
-
 		await this.log('function_call', function_call);
+
+		emitter.emit('tool', function_call);
 
 		try {
 			const response = await func.tool.callFunction(thread, function_call.name, function_call.arguments);
 			if (emitter)
-				emitter.emit('partial', 'Risposta ricevuta da ' + func.tool.name);
+				emitter.emit('tool_response', {name: func.tool.name, success: true, response});
 			return response;
 		} catch (error) {
 			if (emitter)
-				emitter.emit('partial', 'Ricevuto errore da ' + func.tool.name);
+				emitter.emit('tool_response', {name: func.tool.name, success: false, error: error.message || error});
 			return {error};
 		}
 	}

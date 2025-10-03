@@ -137,8 +137,15 @@ async function main() {
 		console.error(`\nAn error occurred: ${error.message}`);
 	});
 
-	emitter.on('partial', (text) => {
-		console.log(`\n> ${text}\n`);
+	emitter.on('tool', (tool) => {
+		console.log(`\n> Using tool: ${tool.name} with arguments ${JSON.stringify(tool.arguments)}\n`);
+	});
+
+	emitter.on('tool_response', (tool_response) => {
+		if (tool_response.success)
+			console.log(`\n> Tool ${tool_response.name} completed successfully with response: ${JSON.stringify(tool_response.response)}\n`);
+        else
+            console.log(`\n> Tool ${tool_response.name} failed with error: ${tool_response.error}\n`);
 	});
 }
 
@@ -149,7 +156,9 @@ When you run this, the agent will respond to your message, and the response will
 
 -   `start`: Emitted when the agent begins processing the message. The `thread` object is passed as an argument.
 -   `output`: Emitted for each chunk of text in the response stream.
--   `partial`: Emitted to provide insight into the agent's internal state, like when it decides to use a tool.
+-   `reasoning`: Emitted when the agent generates reasoning steps (if applicable).
+-   `tool`: Emitted when the agent decides to use a tool. The tool name and arguments are provided.
+-   `tool_response`: Emitted when a tool call completes, with the response or error
 -   `error`: Emitted if an error occurs during processing.
 
 ## Advanced Usage
