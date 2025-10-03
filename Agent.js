@@ -292,8 +292,9 @@ export default class Agent {
 			} catch (e) {
 				reject(e);
 			}
-		}).then(() => {
+		}).then(value => {
 			emitter.emit('end', thread);
+			return value;
 		});
 
 		return this.type === 'chat' ? emitter : execution;
