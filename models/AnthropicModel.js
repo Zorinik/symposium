@@ -187,7 +187,7 @@ export default class AnthropicModel extends Model {
 				};
 
 				if (lastMessage && lastMessage.role === parsedMessage.role) {
-					lastMessage.content = lastMessage.content.concat(message.content);
+					lastMessage.content = lastMessage.content.concat(parsedMessage.content);
 				} else {
 					messages.push(parsedMessage);
 					lastMessage = parsedMessage;
