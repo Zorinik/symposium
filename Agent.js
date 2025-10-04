@@ -432,7 +432,7 @@ export default class Agent {
 
 	async confirmFunctions({thread, functions, completion, emitter}) {
 		const response = await this.callFunctions(thread, emitter, completion, functions, true);
-		if (response.continue)
+		if (response?.type === 'continue')
 			return this.execute(thread, emitter);
 	}
 

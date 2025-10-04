@@ -95,7 +95,7 @@ export default class AnthropicModel extends Model {
 			];
 		} catch (e) {
 			if (e.error?.error?.type === 'rate_limit_error') {
-				console.error('Rate limite exceeded for Anthropic API, waiting 60 seconds...');
+				console.warn('Rate limite exceeded for Anthropic API, waiting 60 seconds...');
 				await new Promise(resolve => setTimeout(resolve, 60000));
 				if ((options.counter || 0) < 3)
 					return this.generate(thread, functions, {...options, counter: (options.counter || 0) + 1});
