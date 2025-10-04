@@ -8,4 +8,8 @@ export default class Tool {
 	async callFunction(thread, name, payload) {
 		return {error: 'callFunction is yet to be implemented'};
 	}
+
+	async authorize(thread, name, payload) {
+		return true;
+	}
 }

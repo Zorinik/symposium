@@ -419,24 +419,10 @@ export default class Agent {
 		}
 
 		if (functions.length) {
-			for (let f of functions) {
-				if (this.utility && ['function', 'json'].includes(this.utility.type))
-					return {type: 'response', value: this.afterHandle(thread, completion, f.arguments)};
+			if (this.utility && ['function', 'json'].includes(this.utility.type))
+				return {type: 'response', value: this.afterHandle(thread, completion, functions[0].arguments)};
 
-				const function_response = await this.callFunction(thread, f, emitter);
-
-				thread.addMessage('tool', [
-					{
-						type: 'function_response',
-						content: {name: f.name, response: function_response, id: f.id || undefined},
-					},
-				], f.name);
-
-				await this.log('function_response', function_response);
-			}
-
-			await this.afterHandle(thread, completion);
-			return {type: 'continue'};
+			return this.callFunctions(thread, emitter, completion, functions);
 		} else {
 			await thread.storeState();
 			await this.afterHandle(thread, completion);
@@ -444,12 +430,50 @@ export default class Agent {
 		}
 	}
 
-	async afterHandle(thread, completion, value = null) {
-		return value;
+	async confirmFunctions({thread, functions, completion, emitter}) {
+		const response = await this.callFunctions(thread, emitter, completion, functions, true);
+		if (response.continue)
+			return this.execute(thread, emitter);
 	}
 
-	getEmitter() {
-		return new BufferedEventEmitter();
+	async callFunctions(thread, emitter, completion, functions_to_call, force_authorize = false) {
+		const functions = await this.getFunctions(false);
+
+		let is_authorized = true;
+		for (let f of functions_to_call) {
+			if (!functions.has(f.name))
+				throw new Error('Unrecognized function ' + f.name);
+
+			if (!force_authorize && !(await functions.get(f.name).tool.authorize(thread, f.name, f.arguments))) {
+				is_authorized = false;
+				break;
+			}
+		}
+
+		if (!is_authorized) {
+			emitter.emit('tools_auth', {thread, functions: functions_to_call, completion, emitter});
+			return {type: 'void'};
+		}
+
+		const responses = await Promise.all(functions_to_call.map(async f => this.callFunction(thread, functions, f, emitter)));
+
+		for (let response of responses) {
+			thread.addMessage('tool', [
+				{
+					type: 'function_response',
+					content: {
+						name: response.function.name,
+						id: response.function.id || undefined,
+						response,
+					},
+				},
+			], response.function.name);
+
+			await this.log('function_response', response);
+		}
+
+		await this.afterHandle(thread, completion);
+		return {type: 'continue'};
 	}
 
 	async getFunctions(parsed = true) {
@@ -475,26 +499,40 @@ export default class Agent {
 			return this.functions;
 	}
 
-	async callFunction(thread, function_call, emitter = null) {
-		const functions = await this.getFunctions(false);
-		if (!functions.has(function_call.name))
-			throw new Error('Unrecognized function ' + function_call.name);
+	async callFunction(thread, functions, function_call, emitter = null) {
+		const function_definition = functions.get(function_call.name);
 
-		const func = functions.get(function_call.name);
 		await this.log('function_call', function_call);
-
 		emitter.emit('tool', function_call);
 
 		try {
-			const response = await func.tool.callFunction(thread, function_call.name, function_call.arguments);
+			const response = await function_definition.tool.callFunction(thread, function_call.name, function_call.arguments);
 			if (emitter)
-				emitter.emit('tool_response', {name: func.tool.name, success: true, response});
-			return response;
+				emitter.emit('tool_response', {name: function_definition.tool.name, success: true, response});
+
+			return {
+				type: 'response',
+				response,
+				function: function_call,
+			};
 		} catch (error) {
 			if (emitter)
-				emitter.emit('tool_response', {name: func.tool.name, success: false, error: error.message || error});
-			return {error};
+				emitter.emit('tool_response', {name: function_definition.tool.name, success: false, error: error.message || error});
+
+			return {
+				type: 'response',
+				response: {error},
+				function: function_call,
+			};
 		}
+	}
+
+	async afterHandle(thread, completion, value = null) {
+		return value;
+	}
+
+	getEmitter() {
+		return new BufferedEventEmitter();
 	}
 
 	async setModel(thread, label) {
