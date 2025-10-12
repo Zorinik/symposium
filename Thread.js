@@ -6,6 +6,7 @@ export default class Thread {
 	unique;
 	agent;
 	messages = [];
+	planned_messages = [];
 	state = {};
 
 	constructor(id, agent) {
@@ -66,6 +67,15 @@ export default class Thread {
 
 	addMessage(role, content = [], name = undefined, tags = []) {
 		this.addDirectMessage(new Message(role, content, name, tags));
+	}
+
+	addPlannedMessage(role, content = [], name = undefined, tags = []) {
+		this.planned_messages.push(new Message(role, content, name, tags));
+	}
+
+	flushPlannedMessages() {
+		this.messages = this.messages.concat(this.planned_messages);
+		this.planned_messages = [];
 	}
 
 	removeMessagesWithTag(tag) {
