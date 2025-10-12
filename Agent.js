@@ -464,7 +464,7 @@ export default class Agent {
 					content: {
 						name: response.function.name,
 						id: response.function.id || undefined,
-						response,
+						response: response.response,
 					},
 				},
 			], response.function.name);
