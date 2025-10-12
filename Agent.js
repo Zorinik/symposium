@@ -472,6 +472,8 @@ export default class Agent {
 			await this.log('function_response', response);
 		}
 
+		thread.flushPlannedMessages();
+
 		await this.afterHandle(thread, completion);
 		return {type: 'continue'};
 	}
