@@ -430,13 +430,13 @@ export default class Agent {
 		}
 	}
 
-	async confirmFunctions({thread, functions, completion, emitter}) {
-		const response = await this.callFunctions(thread, emitter, completion, functions, true);
+	async confirmFunctions({thread, functions, completion, emitter}, always = false) {
+		const response = await this.callFunctions(thread, emitter, completion, functions, true, always);
 		if (response?.type === 'continue')
 			return this.execute(thread, emitter);
 	}
 
-	async callFunctions(thread, emitter, completion, functions_to_call, force_authorize = false) {
+	async callFunctions(thread, emitter, completion, functions_to_call, authorize = false, authorize_always = false) {
 		const functions = await this.getFunctions(false);
 
 		let is_authorized = true;
@@ -444,7 +444,10 @@ export default class Agent {
 			if (!functions.has(f.name))
 				throw new Error('Unrecognized function ' + f.name);
 
-			if (!force_authorize && !(await functions.get(f.name).tool.authorize(thread, f.name, f.arguments))) {
+			if (authorize && authorize_always)
+				await functions.get(f.name).tool.authorizeAlways(thread, f.name, f.arguments);
+
+			if (!authorize && !(await functions.get(f.name).tool.authorize(thread, f.name, f.arguments))) {
 				is_authorized = false;
 				break;
 			}

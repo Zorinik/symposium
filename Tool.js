@@ -12,4 +12,7 @@ export default class Tool {
 	async authorize(thread, name, payload) {
 		return true;
 	}
+
+	async authorizeAlways(thread, name, payload) {
+	}
 }
