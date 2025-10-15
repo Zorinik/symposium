@@ -51,6 +51,9 @@ export default class AnthropicModel extends Model {
 					type: 'tool',
 					name: options.force_function,
 				};
+
+				delete completion_payload.thinking;
+				delete completion_payload.betas;
 			}
 
 			const message = await this.getAnthropic().beta.messages.create(completion_payload);
