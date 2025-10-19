@@ -52,8 +52,11 @@ export default class OllamaModel extends Model {
 			};
 		}
 
-		if (options.response_format)
-			completion_payload.response_format = options.response_format;
+		if (options.response_format) {
+			if (!options.response_format.json_schema)
+				throw new Error('OllamaModel only supports response_format with json_schema');
+			completion_payload.format = options.response_format.json_schema.schema;
+		}
 
 		if (!completion_payload.tools.length)
 			delete completion_payload.tools;
@@ -62,6 +65,9 @@ export default class OllamaModel extends Model {
 		const completion = chatCompletion.message;
 
 		const message_content = [];
+		if (completion.thinking)
+			message_content.push({type: 'reasoning', content: completion.thinking});
+
 		if (completion.content)
 			message_content.push({type: 'text', content: completion.content});
 
@@ -69,12 +75,12 @@ export default class OllamaModel extends Model {
 			message_content.push({
 				type: 'function',
 				content: completion.tool_calls.map(tool_call => {
-					if (tool_call.function)
+					if (!tool_call.function)
 						throw new Error('Unsupported tool type');
 
 					return {
 						name: tool_call.function.name,
-						arguments: tool_call.function.arguments ? JSON.parse(tool_call.function.arguments) : {},
+						arguments: tool_call.function.arguments || {},
 					};
 				}),
 			});
@@ -89,13 +95,18 @@ export default class OllamaModel extends Model {
 		const messages = [],
 			role = message.role === 'system' ? this.system_role_name : message.role;
 
+		let reasoning = null;
 		for (let c of message.content) {
 			switch (c.type) {
+				case 'reasoning':
+					reasoning = c.content;
+					break;
+
 				case 'text':
 					messages.push({
 						role,
 						content: c.content,
-						name: message.name,
+						thinking: reasoning || undefined,
 					});
 					break;
 
@@ -103,21 +114,21 @@ export default class OllamaModel extends Model {
 					if (this.supports_functions) {
 						messages.push({
 							role,
-							name: message.name,
+							thinking: reasoning || undefined,
 							tool_calls: c.content.map(tool_call => ({
 								id: tool_call.id,
 								type: 'function',
 								function: {
 									name: tool_call.name,
-									arguments: tool_call.arguments ? JSON.stringify(tool_call.arguments) : '{}',
+									arguments: tool_call.arguments || {},
 								},
 							})),
 						});
 					} else {
 						messages.push({
 							role,
+							thinking: reasoning || undefined,
 							content: c.content.map(f => '```CALL \n' + f.name + '\n' + JSON.stringify(f.arguments || {}) + '\n```').join("\n\n"),
-							name: message.name,
 						});
 					}
 					break;
@@ -133,7 +144,6 @@ export default class OllamaModel extends Model {
 						messages.push({
 							role: 'user',
 							content: 'FUNCTION RESPONSE:\n' + JSON.stringify(c.content.response),
-							name: message.name,
 						});
 					}
 					break;
