@@ -1,6 +1,9 @@
 export default class Tool {
 	name = '';
 
+	async init(agent) {
+	}
+
 	async getFunctions() {
 		return [];
 	}

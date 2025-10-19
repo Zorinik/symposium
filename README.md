@@ -218,7 +218,7 @@ import WeatherTool from './WeatherTool.js';
 
 // ... inside main()
 const agent = new MyChatAgent();
-agent.addTool(new WeatherTool());
+await agent.addTool(new WeatherTool());
 await agent.init();
 
 const emitter = await agent.message("What's the weather like in Paris?");

@@ -65,12 +65,13 @@ export default class Agent {
 		return {};
 	}
 
-	addTool(tool) {
+	async addTool(tool) {
 		if (!(tool instanceof Tool) || !tool.name)
 			throw new Error('Tool must be an instance of Tool class');
 		if (this.tools.has(tool.name))
 			throw new Error('Tool with name ' + tool.name + ' already exists in agent');
 
+		await tool.init(this);
 		this.tools.set(tool.name, tool);
 	}
 
@@ -120,7 +121,7 @@ export default class Agent {
 			if (is_there_on_request) {
 				context_string = '<important>Some of the context files are available to you immediately here, while longer texts may be available only on request; you are provided with a title and a description of these files. If you think it may be useful for your current task, you can request the text via the get_context tool - IMPORTANT: use the title of the file verbatim as it is provided</important>' + context_string;
 				if (!this.tools.has('get_context'))
-					this.addTool(new GetContextTool(this));
+					await this.addTool(new GetContextTool(this));
 			}
 			context_string = '\n<context_info>' + context_string + '</context_info>';
 
