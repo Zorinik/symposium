@@ -58,7 +58,7 @@ export default class Agent {
 
 	async resetState(thread) {
 		thread.state = await this.getDefaultState();
-		thread.state.model = Symposium.getModelByLabel(this.default_model).name;
+		thread.state.model = this.default_model;
 	}
 
 	async getDefaultState() {
@@ -171,8 +171,8 @@ export default class Agent {
 		if (typeof thread !== 'object')
 			thread = await this.getThread(thread);
 
-		const model = Symposium.getModelByName(thread.state.model);
-		if (!model.supports_audio && typeof content !== 'string') {
+		const model = Symposium.getModel(thread.state.model);
+		if (!model.audio && typeof content !== 'string') {
 			for (let c of content) {
 				if (c.type === 'audio' && !c.content?.transcription) {
 					const words = await this.getPromptWordsForTranscription(thread);
@@ -203,7 +203,7 @@ export default class Agent {
 				if (counter === 0)
 					thread = await this.beforeExecute(thread, emitter);
 
-				const model = Symposium.getModelByName(thread.state.model);
+				const model = Symposium.getModel(thread.state.model);
 
 				const completion_options = {};
 				if (this.type === 'utility') {
@@ -212,7 +212,7 @@ export default class Agent {
 							throw new Error('Bad function definition');
 
 						let response_format = null;
-						if (this.utility.type === 'json' && model.supports_structured_output)
+						if (this.utility.type === 'json' && model.structured_output)
 							response_format = this.convertFunctionToResponseFormat(this.utility.function.parameters);
 
 						if (response_format && response_format.count <= 100) { // OpenAI does not support structured output if there are more than 100 parameters
@@ -340,9 +340,9 @@ export default class Agent {
 
 	async generateCompletion(thread, options = {}, retry_counter = 1) {
 		try {
-			const model = Symposium.getModelByName(thread.state.model);
-			const messages = await model.generate(thread, await this.getFunctions(), options);
-			return model.supports_functions ? messages : messages.map(m => this.parseFunctions(m));
+			const model = Symposium.getModel(thread.state.model);
+			const messages = await model.class.generate(model, thread, await this.getFunctions(), options);
+			return model.tools ? messages : messages.map(m => this.parseFunctions(m));
 		} catch (error) {
 			if (error.response) {
 				console.error(error.response.status);
@@ -391,7 +391,7 @@ export default class Agent {
 	}
 
 	async handleCompletion(thread, completion, emitter) {
-		const model = Symposium.getModelByName(thread.state.model);
+		const model = Symposium.getModel(thread.state.model);
 
 		const functions = [];
 		for (let message of completion) {
@@ -404,7 +404,7 @@ export default class Agent {
 						if (this.type === 'utility') {
 							if (this.utility.type === 'text')
 								return {type: 'response', value: this.afterHandle(thread, completion, m.content)};
-							if (this.utility.type === 'json' && model.supports_structured_output)
+							if (this.utility.type === 'json' && model.structured_output)
 								return {type: 'response', value: this.afterHandle(thread, completion, JSON.parse(m.content))};
 						}
 
@@ -542,7 +542,7 @@ export default class Agent {
 	}
 
 	async setModel(thread, label) {
-		const model_to_switch = Symposium.getModelByLabel(label);
+		const model_to_switch = Symposium.getModel(label);
 		if (model_to_switch && model_to_switch.type === 'llm')
 			await thread.setState({model: model_to_switch.name});
 		else

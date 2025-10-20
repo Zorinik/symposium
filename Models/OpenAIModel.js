@@ -5,8 +5,30 @@ import {encoding_for_model} from "tiktoken";
 
 export default class OpenAIModel extends Model {
 	openai;
-	name_for_tiktoken;
-	supports_functions = true;
+	models = new Map([
+		['gpt-4o', {
+			name: 'gpt-4o',
+			tiktoken: 'gpt-4',
+			tokens: 128000,
+			tools: true,
+			structured_output: true,
+		}],
+		['gpt-5', {
+			name: 'gpt-5',
+			tiktoken: 'gpt-4',
+			tokens: 400000,
+			tools: true,
+			structured_output: true,
+			audio: true,
+		}],
+		['gpt-5-mini', {
+			name: 'gpt-5-mini',
+			tiktoken: 'gpt-4',
+			tokens: 400000,
+			tools: true,
+			structured_output: true,
+		}]
+	]);
 
 	getOpenAi() {
 		if (!this.openai)
@@ -15,14 +37,14 @@ export default class OpenAIModel extends Model {
 		return this.openai;
 	}
 
-	async generate(thread, functions = [], options = {}) {
+	async generate(model, thread, functions = [], options = {}) {
 		const parsed = this.parseOptions(options, functions);
 		options = parsed.options;
 		functions = parsed.functions;
 
 		let messages = thread.messages;
 
-		if (functions.length && !this.supports_functions) {
+		if (functions.length && !model.tools) {
 			// Se il modello non supporta nativamente le funzioni, inserisco il prompt ad hoc come ultimo messaggio di sistema
 			const functions_prompt = this.promptFromFunctions(options, functions);
 			let system_messages = [], other_messages = [], first_found = false;
@@ -44,10 +66,10 @@ export default class OpenAIModel extends Model {
 
 		const convertedMessages = [];
 		for (let m of messages)
-			convertedMessages.push(...this.convertMessage(m));
+			convertedMessages.push(...this.convertMessage(m, model));
 
 		const completion_payload = {
-			model: this.name,
+			model: model.name,
 			messages: convertedMessages,
 			tools: functions.map(f => ({
 				type: 'function',
@@ -98,7 +120,8 @@ export default class OpenAIModel extends Model {
 
 	async countTokens(thread) {
 		try {
-			const encoder = encoding_for_model(this.name_for_tiktoken || this.name);
+			const model = this.models.get(thread.state.model);
+			const encoder = encoding_for_model(model.tiktoken || model.name);
 
 			const texts = [];
 			for (let message of thread.messages)
@@ -109,7 +132,7 @@ export default class OpenAIModel extends Model {
 		}
 	}
 
-	convertMessage(message) {
+	convertMessage(message, model) {
 		const messages = [],
 			role = message.role === 'system' ? this.system_role_name : message.role;
 
@@ -140,7 +163,7 @@ export default class OpenAIModel extends Model {
 					break;
 
 				case 'audio':
-					if (this.supports_audio) {
+					if (model.audio) {
 						if (c.content.type !== 'base64')
 							throw new Error('Audio content must be base64 encoded for this model');
 						if (!['audio/mpeg', 'audio/wav'].includes(c.content.mime))
@@ -171,7 +194,7 @@ export default class OpenAIModel extends Model {
 					break;
 
 				case 'function':
-					if (this.supports_functions) {
+					if (model.tools) {
 						messages.push({
 							role,
 							name: message.name,
@@ -194,7 +217,7 @@ export default class OpenAIModel extends Model {
 					break;
 
 				case 'function_response':
-					if (this.supports_functions) {
+					if (model.tools) {
 						messages.push({
 							role,
 							tool_call_id: c.content.id,

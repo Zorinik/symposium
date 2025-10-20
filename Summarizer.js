@@ -9,7 +9,7 @@ export default class Summarizer extends ContextHandler {
 	}
 
 	async handle(thread) {
-		const model = Symposium.getModelByName(thread.state.model);
+		const model = Symposium.getModel(thread.state.model);
 		if (!model)
 			return thread;
 

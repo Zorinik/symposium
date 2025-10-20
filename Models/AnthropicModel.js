@@ -4,7 +4,33 @@ import Message from "../Message.js";
 
 export default class AnthropicModel extends Model {
 	anthropic;
-	supports_functions = true;
+	models = new Map([
+		['claude-3.7-sonnet', {
+			name: 'claude-3-7-sonnet-latest',
+			tokens: 200000,
+			tools: true,
+		}],
+		['claude-4-opus', {
+			name: 'claude-opus-4-20250514',
+			tokens: 200000,
+			tools: true,
+		}],
+		['claude-4-sonnet', {
+			name: 'claude-sonnet-4-20250514',
+			tokens: 200000,
+			tools: true,
+		}],
+		['claude-4.5-haiku', {
+			name: 'claude-haiku-4-5-20251001',
+			tokens: 200000,
+			tools: true,
+		}],
+		['claude-4.5-sonnet', {
+			name: 'claude-sonnet-4-5-20250929',
+			tokens: 200000,
+			tools: true,
+		}],
+	]);
 
 	getAnthropic() {
 		if (!this.anthropic)
@@ -13,7 +39,7 @@ export default class AnthropicModel extends Model {
 		return this.anthropic;
 	}
 
-	async generate(thread, functions = [], options = {}) {
+	async generate(model, thread, functions = [], options = {}) {
 		try {
 			const parsed = this.parseOptions(options, functions);
 			options = parsed.options;
@@ -21,7 +47,7 @@ export default class AnthropicModel extends Model {
 
 			let [system, messages] = await this.convertMessages(thread);
 
-			if (functions.length && !this.supports_functions) {
+			if (functions.length && !model.tools) {
 				// Se il modello non supporta nativamente le funzioni, aggiungo il prompt al messaggio di sistema
 				const functions_prompt = this.promptFromFunctions(options, functions);
 				system += "\n\n" + functions_prompt;
@@ -29,7 +55,7 @@ export default class AnthropicModel extends Model {
 			}
 
 			const completion_payload = {
-				model: this.name,
+				model: model.name,
 				system,
 				max_tokens: 16000,
 				thinking: {
@@ -101,7 +127,7 @@ export default class AnthropicModel extends Model {
 				console.warn('Rate limite exceeded for Anthropic API, waiting 60 seconds...');
 				await new Promise(resolve => setTimeout(resolve, 60000));
 				if ((options.counter || 0) < 3)
-					return this.generate(thread, functions, {...options, counter: (options.counter || 0) + 1});
+					return this.generate(model, thread, functions, {...options, counter: (options.counter || 0) + 1});
 				else
 					throw new Error('Rate limit exceeded for Anthropic API, aborting.');
 			}

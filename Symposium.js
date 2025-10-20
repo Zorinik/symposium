@@ -25,14 +25,10 @@ export default class Symposium {
 			if (!file.endsWith('.js'))
 				continue;
 
-			const module = await import(`./models/${file}`);
+			const module = await import(`./Models/${file}`);
 			const ModelClass = module.default;
-			if (ModelClass) {
-				const model = new ModelClass();
-				if (!model.name)
-					continue;
-				this.loadModel(model);
-			}
+			if (ModelClass)
+				this.loadModel(new ModelClass());
 		}
 
 		if (storage) {
@@ -41,16 +37,18 @@ export default class Symposium {
 		}
 	}
 
-	static loadModel(model) {
-		this.models.set(model.name, model);
+	static loadModel(model_class) {
+		for (let [key, model] of model_class.models.entries()) {
+			this.models.set(key, {
+				...model,
+				type: model_class.type,
+				class: model_class,
+			});
+		}
 	}
 
-	static getModelByName(name) {
+	static getModel(name) {
 		return this.models.get(name);
-	}
-
-	static getModelByLabel(label) {
-		return Array.from(this.models.values()).find(model => model.label === label);
 	}
 
 	static extractFunctionsFromResponse(messages) {
@@ -68,9 +66,15 @@ export default class Symposium {
 		return functions;
 	}
 
-	static async transcribe(audio, prompt = null) {
-		if (!process.env.TRANSCRIPTION_MODEL)
-			throw new Error('Transcription is not enabled');
+	static async transcribe(audio, prompt = null, model = null) {
+		model = model || process.env.TRANSCRIPTION_MODEL;
+		if (!model)
+			throw new Error('Transcription model not specified');
+
+		if (!this.transcription_model)
+			this.transcription_model = Symposium.getModel(model);
+		if (!this.transcription_model.type !== 'stt')
+			throw new Error('Specified model is not a transcription model');
 
 		let file;
 		switch (audio.type) {
@@ -96,10 +100,7 @@ export default class Symposium {
 				break;
 		}
 
-		if (!this.transcription_model)
-			this.transcription_model = Symposium.getModelByName(process.env.TRANSCRIPTION_MODEL);
-
-		return this.transcription_model.transcribe(file, prompt);
+		return this.transcription_model.transcribe(file, model, prompt);
 	}
 
 	static getExtFromMime(mime) {
@@ -124,6 +125,8 @@ export default class Symposium {
 		};
 
 		agent.doInitThread = async thread => {
+			if (options.model)
+				await thread.setModel(options.model);
 			await thread.addMessage('system', system);
 		};
 

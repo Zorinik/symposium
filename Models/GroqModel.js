@@ -1,18 +1,37 @@
-import ollama from "ollama";
 import Model from "../Model.js";
+import Groq from "groq-sdk";
 import Message from "../Message.js";
 
-export default class OllamaModel extends Model {
-	supports_functions = true;
+export default class GroqModel extends Model {
+	groq;
+	models = new Map([
+		['llama-3', {
+			name: 'llama-3.3-70b-versatile',
+			tokens: 128000,
+			tools: true,
+		}],
+		['mixtral-8', {
+			name: 'mixtral-8x7b-32768',
+			tokens: 32768,
+			tools: true,
+		}],
+	]);
 
-	async generate(thread, functions = [], options = {}) {
+	getGroq() {
+		if (!this.groq)
+			this.groq = new Groq();
+
+		return this.groq;
+	}
+
+	async generate(model, thread, functions = [], options = {}) {
 		const parsed = this.parseOptions(options, functions);
 		options = parsed.options;
 		functions = parsed.functions;
 
 		let messages = thread.messages;
 
-		if (functions.length && !this.supports_functions) {
+		if (functions.length && !model.tools) {
 			// Se il modello non supporta nativamente le funzioni, inserisco il prompt ad hoc come ultimo messaggio di sistema
 			const functions_prompt = this.promptFromFunctions(options, functions);
 			let system_messages = [], other_messages = [], first_found = false;
@@ -34,10 +53,10 @@ export default class OllamaModel extends Model {
 
 		const convertedMessages = [];
 		for (let m of messages)
-			convertedMessages.push(...this.convertMessage(m));
+			convertedMessages.push(...this.convertMessage(m, model));
 
 		const completion_payload = {
-			model: this.name,
+			model: model.name,
 			messages: convertedMessages,
 			tools: functions.map(f => ({
 				type: 'function',
@@ -52,22 +71,13 @@ export default class OllamaModel extends Model {
 			};
 		}
 
-		if (options.response_format) {
-			if (!options.response_format.json_schema)
-				throw new Error('OllamaModel only supports response_format with json_schema');
-			completion_payload.format = options.response_format.json_schema.schema;
-		}
-
 		if (!completion_payload.tools.length)
 			delete completion_payload.tools;
 
-		const chatCompletion = await ollama.chat(completion_payload);
-		const completion = chatCompletion.message;
+		const chatCompletion = await this.getGroq().chat.completions.create(completion_payload);
+		const completion = chatCompletion.choices[0].message;
 
 		const message_content = [];
-		if (completion.thinking)
-			message_content.push({type: 'reasoning', content: completion.thinking});
-
 		if (completion.content)
 			message_content.push({type: 'text', content: completion.content});
 
@@ -75,12 +85,13 @@ export default class OllamaModel extends Model {
 			message_content.push({
 				type: 'function',
 				content: completion.tool_calls.map(tool_call => {
-					if (!tool_call.function)
-						throw new Error('Unsupported tool type');
+					if (tool_call.type !== 'function')
+						throw new Error('Unsupported tool type ' + tool_call.type);
 
 					return {
+						id: tool_call.id,
 						name: tool_call.function.name,
-						arguments: tool_call.function.arguments || {},
+						arguments: tool_call.function.arguments ? JSON.parse(tool_call.function.arguments) : {},
 					};
 				}),
 			});
@@ -91,60 +102,83 @@ export default class OllamaModel extends Model {
 		];
 	}
 
-	convertMessage(message) {
-		const messages = [],
-			role = message.role === 'system' ? this.system_role_name : message.role;
-
-		let reasoning = null;
+	convertMessage(message, model) {
+		const messages = [];
 		for (let c of message.content) {
 			switch (c.type) {
-				case 'reasoning':
-					reasoning = c.content;
-					break;
-
 				case 'text':
 					messages.push({
-						role,
+						role: message.role,
 						content: c.content,
-						thinking: reasoning || undefined,
+						name: message.name,
+					});
+					break;
+
+				case 'image':
+					messages.push({
+						role: message.role,
+						content: [
+							{
+								type: 'image_url',
+								image_url: {
+									url: c.content.type === 'base64' ? 'data:' + c.content.mime + ';base64,' + c.content.data : c.content.data,
+								},
+							},
+						],
+						name: message.name,
 					});
 					break;
 
 				case 'function':
-					if (this.supports_functions) {
+					if (model.tools) {
 						messages.push({
-							role,
-							thinking: reasoning || undefined,
+							role: message.role,
+							name: message.name,
 							tool_calls: c.content.map(tool_call => ({
 								id: tool_call.id,
 								type: 'function',
 								function: {
 									name: tool_call.name,
-									arguments: tool_call.arguments || {},
+									arguments: tool_call.arguments ? JSON.stringify(tool_call.arguments) : '{}',
 								},
 							})),
 						});
 					} else {
 						messages.push({
-							role,
-							thinking: reasoning || undefined,
+							role: message.role,
 							content: c.content.map(f => '```CALL \n' + f.name + '\n' + JSON.stringify(f.arguments || {}) + '\n```').join("\n\n"),
+							name: message.name,
 						});
 					}
 					break;
 
 				case 'function_response':
-					if (this.supports_functions) {
+					if (model.tools) {
 						messages.push({
-							role: 'tool',
+							role: message.role,
+							tool_call_id: c.content.id,
 							content: JSON.stringify(c.content.response),
-							tool_name: message.name,
+							name: message.name,
 						});
 					} else {
 						messages.push({
 							role: 'user',
 							content: 'FUNCTION RESPONSE:\n' + JSON.stringify(c.content.response),
+							name: message.name,
 						});
+					}
+					break;
+
+
+				case 'audio':
+					if (c.content.transcription) {
+						messages.push({
+							role: message.role,
+							content: '[transcribed] ' + c.content.transcription,
+							name: message.name,
+						});
+					} else {
+						throw new Error('Audio content is not supported by this model');
 					}
 					break;
 

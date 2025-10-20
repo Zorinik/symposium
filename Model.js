@@ -1,19 +1,10 @@
 export default class Model {
 	type = 'llm';
-	name;
-	label;
+	models = new Map();
 	tokens;
-	supports_functions = false;
-	supports_structured_output = false;
 	system_role_name = 'system';
-	supports_audio = false;
 
-	constructor() {
-		if (!this.label)
-			this.label = this.name;
-	}
-
-	async generate(thread, functions = [], options = {}) {
+	async generate(model, thread, functions = [], options = {}) {
 		return null;
 	}
 
