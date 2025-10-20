@@ -8,6 +8,7 @@ export default class Symposium {
 	static models = new Map();
 	static storage = null;
 	static transcription_model = null;
+	static embedding_model = null;
 
 	/*
 	* Storage must expose the following methods:
@@ -76,7 +77,7 @@ export default class Symposium {
 
 		if (!this.transcription_model)
 			this.transcription_model = Symposium.getModel(model);
-		if (!this.transcription_model.type !== 'stt')
+		if (!!this.transcription_model || !this.transcription_model.type !== 'stt')
 			throw new Error('Specified model is not a transcription model');
 
 		let file;
@@ -103,7 +104,7 @@ export default class Symposium {
 				break;
 		}
 
-		return this.transcription_model.transcribe(file, model, prompt);
+		return this.transcription_model.class.transcribe(file, model, this.transcription_model);
 	}
 
 	static async embed(input, model = null) {
@@ -111,11 +112,12 @@ export default class Symposium {
 		if (!model)
 			throw new Error('Embedding model not specified');
 
-		const embedding_model = Symposium.getModel(model);
-		if (!embedding_model || embedding_model.type !== 'embedding')
+		if (!this.embedding_model)
+			this.embedding_model = Symposium.getModel(model);
+		if (!this.embedding_model || this.embedding_model.type !== 'embedding')
 			throw new Error('Specified model is not an embedding model');
 
-		return embedding_model.embed(input, model);
+		return this.embedding_model.class.embed(input, this.embedding_model);
 	}
 
 	static getExtFromMime(mime) {
