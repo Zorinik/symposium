@@ -39,6 +39,9 @@ export default class Symposium {
 
 	static loadModel(model_class) {
 		for (let [key, model] of model_class.models.entries()) {
+			if (this.models.has(key))
+				throw new Error(`Duplicate model with key "${key}"`);
+
 			this.models.set(key, {
 				...model,
 				type: model_class.type,
