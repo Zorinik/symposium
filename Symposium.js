@@ -106,6 +106,18 @@ export default class Symposium {
 		return this.transcription_model.transcribe(file, model, prompt);
 	}
 
+	static async embed(input, model = null) {
+		model = model || process.env.EMBEDDING_MODEL;
+		if (!model)
+			throw new Error('Embedding model not specified');
+
+		const embedding_model = Symposium.getModel(model);
+		if (!embedding_model || embedding_model.type !== 'embedding')
+			throw new Error('Specified model is not an embedding model');
+
+		return embedding_model.embed(input, model);
+	}
+
 	static getExtFromMime(mime) {
 		const mimeToExt = {
 			'audio/mpeg': 'mp3',
