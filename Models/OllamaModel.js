@@ -4,14 +4,20 @@ import Message from "../Message.js";
 
 export default class OllamaModel extends Model {
 	async getModels() {
-		return new Map([ // TODO: dynamic models (via ollama API?)
-			['gpt-oss-20b', {
-				name: 'gpt-oss:20b',
-				tokens: 32768,
+		const {models} = await ollama.list();
+
+		const map = new Map();
+
+		for (let m of models) {
+			map.set(m.name, {
+				name: m.name,
+				tokens: null, // TODO
 				tools: true,
 				structured_output: true,
-			}],
-		]);
+			})
+		}
+
+		return map;
 	}
 
 	async generate(model, thread, functions = [], options = {}) {

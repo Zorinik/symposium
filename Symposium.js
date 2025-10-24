@@ -39,7 +39,7 @@ export default class Symposium {
 	}
 
 	static async loadModel(model_class) {
-		const models = await model_class.getModels().entries();
+		const models = (await model_class.getModels()).entries();
 		for (let [key, model] of models) {
 			if (this.models.has(key))
 				throw new Error(`Duplicate model with key "${key}"`);
