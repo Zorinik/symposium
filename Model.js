@@ -1,8 +1,11 @@
 export default class Model {
 	type = 'llm';
-	models = new Map();
 	tokens;
 	system_role_name = 'system';
+
+	async getModels() {
+		return new Map();
+	}
 
 	async generate(model, thread, functions = [], options = {}) {
 		return null;

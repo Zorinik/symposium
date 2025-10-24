@@ -2,10 +2,13 @@ import OpenAIModel from "./OpenAIModel.js";
 
 export default class OpenAIEmbedding extends OpenAIModel {
 	type = 'embedding';
-	models = new Map([
-		['openai-text-embedding-3-large', {name: 'text-embedding-3-large'}],
-		['openai-text-embedding-3-small', {name: 'text-embedding-3-small'}],
-	]);
+
+	async getModels() {
+		return new Map([
+			['openai-text-embedding-3-large', {name: 'text-embedding-3-large'}],
+			['openai-text-embedding-3-small', {name: 'text-embedding-3-small'}],
+		]);
+	}
 
 	async embed(input, model) {
 		const response = await this.getOpenAi().embeddings.create({

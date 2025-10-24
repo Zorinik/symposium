@@ -4,33 +4,36 @@ import Message from "../Message.js";
 
 export default class AnthropicModel extends Model {
 	anthropic;
-	models = new Map([
-		['claude-3.7-sonnet', {
-			name: 'claude-3-7-sonnet-latest',
-			tokens: 200000,
-			tools: true,
-		}],
-		['claude-4-opus', {
-			name: 'claude-opus-4-20250514',
-			tokens: 200000,
-			tools: true,
-		}],
-		['claude-4-sonnet', {
-			name: 'claude-sonnet-4-20250514',
-			tokens: 200000,
-			tools: true,
-		}],
-		['claude-4.5-haiku', {
-			name: 'claude-haiku-4-5-20251001',
-			tokens: 200000,
-			tools: true,
-		}],
-		['claude-4.5-sonnet', {
-			name: 'claude-sonnet-4-5-20250929',
-			tokens: 200000,
-			tools: true,
-		}],
-	]);
+
+	async getModels() {
+		return new Map([
+			['claude-3.7-sonnet', {
+				name: 'claude-3-7-sonnet-latest',
+				tokens: 200000,
+				tools: true,
+			}],
+			['claude-4-opus', {
+				name: 'claude-opus-4-20250514',
+				tokens: 200000,
+				tools: true,
+			}],
+			['claude-4-sonnet', {
+				name: 'claude-sonnet-4-20250514',
+				tokens: 200000,
+				tools: true,
+			}],
+			['claude-4.5-haiku', {
+				name: 'claude-haiku-4-5-20251001',
+				tokens: 200000,
+				tools: true,
+			}],
+			['claude-4.5-sonnet', {
+				name: 'claude-sonnet-4-5-20250929',
+				tokens: 200000,
+				tools: true,
+			}],
+		]);
+	}
 
 	getAnthropic() {
 		if (!this.anthropic)

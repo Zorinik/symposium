@@ -4,18 +4,21 @@ import Message from "../Message.js";
 
 export default class GroqModel extends Model {
 	groq;
-	models = new Map([
-		['llama-3', {
-			name: 'llama-3.3-70b-versatile',
-			tokens: 128000,
-			tools: true,
-		}],
-		['mixtral-8', {
-			name: 'mixtral-8x7b-32768',
-			tokens: 32768,
-			tools: true,
-		}],
-	]);
+
+	async getModels() {
+		return new Map([
+			['llama-3', {
+				name: 'llama-3.3-70b-versatile',
+				tokens: 128000,
+				tools: true,
+			}],
+			['mixtral-8', {
+				name: 'mixtral-8x7b-32768',
+				tokens: 32768,
+				tools: true,
+			}],
+		]);
+	}
 
 	getGroq() {
 		if (!this.groq)

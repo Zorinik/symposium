@@ -29,7 +29,7 @@ export default class Symposium {
 			const module = await import(`./Models/${file}`);
 			const ModelClass = module.default;
 			if (ModelClass)
-				this.loadModel(new ModelClass());
+				await this.loadModel(new ModelClass());
 		}
 
 		if (storage) {
@@ -38,8 +38,9 @@ export default class Symposium {
 		}
 	}
 
-	static loadModel(model_class) {
-		for (let [key, model] of model_class.models.entries()) {
+	static async loadModel(model_class) {
+		const models = await model_class.getModels().entries();
+		for (let [key, model] of models) {
 			if (this.models.has(key))
 				throw new Error(`Duplicate model with key "${key}"`);
 

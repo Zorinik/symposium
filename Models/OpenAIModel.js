@@ -5,30 +5,33 @@ import {encoding_for_model} from "tiktoken";
 
 export default class OpenAIModel extends Model {
 	openai;
-	models = new Map([
-		['gpt-4o', {
-			name: 'gpt-4o',
-			tiktoken: 'gpt-4',
-			tokens: 128000,
-			tools: true,
-			structured_output: true,
-		}],
-		['gpt-5', {
-			name: 'gpt-5',
-			tiktoken: 'gpt-4',
-			tokens: 400000,
-			tools: true,
-			structured_output: true,
-			audio: true,
-		}],
-		['gpt-5-mini', {
-			name: 'gpt-5-mini',
-			tiktoken: 'gpt-4',
-			tokens: 400000,
-			tools: true,
-			structured_output: true,
-		}]
-	]);
+
+	async getModels() {
+		return new Map([
+			['gpt-4o', {
+				name: 'gpt-4o',
+				tiktoken: 'gpt-4',
+				tokens: 128000,
+				tools: true,
+				structured_output: true,
+			}],
+			['gpt-5', {
+				name: 'gpt-5',
+				tiktoken: 'gpt-4',
+				tokens: 400000,
+				tools: true,
+				structured_output: true,
+				audio: true,
+			}],
+			['gpt-5-mini', {
+				name: 'gpt-5-mini',
+				tiktoken: 'gpt-4',
+				tokens: 400000,
+				tools: true,
+				structured_output: true,
+			}],
+		]);
+	}
 
 	getOpenAi() {
 		if (!this.openai)
@@ -120,7 +123,7 @@ export default class OpenAIModel extends Model {
 
 	async countTokens(thread) {
 		try {
-			const model = this.models.get(thread.state.model);
+			const model = (await this.getModels()).get(thread.state.model);
 			const encoder = encoding_for_model(model.tiktoken || model.name);
 
 			const texts = [];
@@ -188,7 +191,7 @@ export default class OpenAIModel extends Model {
 							content: '[transcribed] ' + c.content.transcription,
 							name: message.name,
 						});
-					} else{
+					} else {
 						throw new Error('Audio content is not supported by this model');
 					}
 					break;
