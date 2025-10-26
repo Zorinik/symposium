@@ -4,20 +4,25 @@ import Message from "../Message.js";
 
 export default class OllamaModel extends Model {
 	async getModels() {
-		const {models} = await ollama.list();
+		try {
+			const {models} = await ollama.list();
 
-		const map = new Map();
+			const map = new Map();
 
-		for (let m of models) {
-			map.set(m.name, {
-				name: m.name,
-				tokens: null, // TODO
-				tools: true,
-				structured_output: true,
-			})
+			for (let m of models) {
+				map.set(m.name, {
+					name: m.name,
+					tokens: null, // TODO
+					tools: true,
+					structured_output: true,
+				})
+			}
+
+			return map;
+		} catch (e) {
+			// Ollama daemon not running or not reachable
+			return new Map();
 		}
-
-		return map;
 	}
 
 	async generate(model, thread, functions = [], options = {}) {
