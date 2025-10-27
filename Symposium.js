@@ -19,7 +19,7 @@ export default class Symposium {
 	static async init(storage = null) {
 		const __filename = fileURLToPath(import.meta.url);
 		const __dirname = path.dirname(__filename);
-		const modelsPath = path.join(__dirname, 'models');
+		const modelsPath = path.join(__dirname, 'Models');
 
 		const modelFiles = await fs.promises.readdir(modelsPath);
 		for (const file of modelFiles) {
