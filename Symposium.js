@@ -144,10 +144,11 @@ export default class Symposium {
 
 		agent.doInitThread = async thread => {
 			if (options.model)
-				await thread.setModel(options.model);
+				await thread.setState({model: options.model})
 			await thread.addMessage('system', system);
 		};
 
+		await agent.init();
 		const thread = await agent.getThread();
 		return agent.message(prompt, thread);
 	}
