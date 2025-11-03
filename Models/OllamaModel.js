@@ -57,7 +57,7 @@ export default class OllamaModel extends Model {
 			convertedMessages.push(...this.convertMessage(m, model));
 
 		const completion_payload = {
-			model: this.name,
+			model: model.name,
 			messages: convertedMessages,
 			tools: functions.map(f => ({
 				type: 'function',
