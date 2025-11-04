@@ -1,13 +1,13 @@
 {
   "type": "module",
   "name": "symposium",
-  "version": "2.1.9",
+  "version": "2.2.0",
   "description": "Agents",
   "main": "index.js",
   "author": "Domenico Giambra",
   "license": "ISC",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.67.0",
+    "@anthropic-ai/sdk": "^0.68.0",
     "groq-sdk": "^0.34.0",
     "ollama": "^0.6.0",
     "openai": "^6.0.0",

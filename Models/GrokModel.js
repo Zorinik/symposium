@@ -1,7 +1,7 @@
-import OpenAIModel from "./OpenAIModel.js";
+import LegacyOpenAIModel from "./LegacyOpenAIModel.js";
 import OpenAI from "openai";
 
-export default class GrokModel extends OpenAIModel {
+export default class GrokModel extends LegacyOpenAIModel {
 	async getModels() {
 		return new Map([
 			['grok-4', {

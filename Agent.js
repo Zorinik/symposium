@@ -22,6 +22,7 @@ export default class Agent {
 	type = 'chat'; // chat, utility
 	utility = null;
 	initialized = false;
+	enable_image_generation = false;
 
 	constructor(options) {
 		this.options = {
@@ -218,11 +219,9 @@ export default class Agent {
 						if (response_format && response_format.count <= 100) { // OpenAI does not support structured output if there are more than 100 parameters
 							completion_options.response_format = {
 								type: 'json_schema',
-								json_schema: {
-									name: this.utility.function.name,
-									schema: response_format.obj,
-									strict: true,
-								},
+								name: this.utility.function.name,
+								schema: response_format.obj,
+								strict: true,
 							};
 						} else {
 							completion_options.functions = [
@@ -341,7 +340,10 @@ export default class Agent {
 	async generateCompletion(thread, options = {}, retry_counter = 1) {
 		try {
 			const model = Symposium.getModel(thread.state.model);
-			const messages = await model.class.generate(model, thread, await this.getFunctions(), options);
+			const messages = await model.class.generate(model, thread, await this.getFunctions(), {
+				...options,
+				image_generation: this.enable_image_generation,
+			});
 			return model.tools ? messages : messages.map(m => this.parseFunctions(m));
 		} catch (error) {
 			if (error.response) {

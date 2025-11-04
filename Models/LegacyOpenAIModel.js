@@ -3,35 +3,11 @@ import OpenAI from "openai";
 import Message from "../Message.js";
 import {encoding_for_model} from "tiktoken";
 
-export default class OpenAIModel extends Model {
+export default class LegacyOpenAIModel extends Model {
 	openai;
 
 	async getModels() {
-		return new Map([
-			['gpt-4o', {
-				name: 'gpt-4o',
-				tiktoken: 'gpt-4',
-				tokens: 128000,
-				tools: true,
-				structured_output: true,
-			}],
-			['gpt-5', {
-				name: 'gpt-5',
-				tiktoken: 'gpt-4',
-				tokens: 400000,
-				tools: true,
-				structured_output: true,
-				audio: true,
-				image_generation: true,
-			}],
-			['gpt-5-mini', {
-				name: 'gpt-5-mini',
-				tiktoken: 'gpt-4',
-				tokens: 400000,
-				tools: true,
-				structured_output: true,
-			}],
-		]);
+		return new Map([]);
 	}
 
 	getOpenAi() {
@@ -72,69 +48,49 @@ export default class OpenAIModel extends Model {
 		for (let m of messages)
 			convertedMessages.push(...this.convertMessage(m, model));
 
-		const tools = functions.map(f => ({
-			type: 'function',
-			...f,
-		}));
-
-		if (model.tools && model.image_generation && options.image_generation)
-			tools.push({type: 'image_generation'});
-
 		const completion_payload = {
 			model: model.name,
-			input: convertedMessages,
-			store: false,
-			include: ['reasoning.encrypted_content'],
-			tools,
-			reasoning: {
-				summary: 'auto',
-			},
+			messages: convertedMessages,
+			tools: functions.map(f => ({
+				type: 'function',
+				function: f,
+			})),
 		};
 
 		if (options.force_function) {
 			completion_payload.tool_choice = {
 				type: 'function',
-				name: options.force_function,
+				function: {name: options.force_function},
 			};
 		}
 
 		if (options.response_format)
-			completion_payload.text = {format: options.response_format};
+			completion_payload.response_format = options.response_format;
 
 		if (!completion_payload.tools.length)
 			delete completion_payload.tools;
 
-		const completion = await this.getOpenAi().responses.create(completion_payload);
+		const chatCompletion = await this.getOpenAi().chat.completions.create(completion_payload);
+		const completion = chatCompletion.choices[0].message;
 
 		const message_content = [];
-		for (let output of completion.output) {
-			switch (output.type) {
-				case 'message':
-					let text = output.content.map(c => c.text).join('\n');
-					message_content.push({type: 'text', content: text});
-					break;
+		if (completion.content)
+			message_content.push({type: 'text', content: completion.content});
 
-				case 'function_call':
-					message_content.push({
-						type: 'function',
-						content: [
-							{
-								id: output.call_id,
-								name: output.name,
-								arguments: output.arguments ? JSON.parse(output.arguments) : {},
-							},
-						],
-					});
-					break;
+		if (completion.tool_calls?.length) {
+			message_content.push({
+				type: 'function',
+				content: completion.tool_calls.map(tool_call => {
+					if (tool_call.type !== 'function')
+						throw new Error('Unsupported tool type ' + tool_call.type);
 
-				case 'reasoning':
-					message_content.push({
-						type: 'reasoning',
-						content: output.summary?.length ? output.summary.map(s => s.text).join('\n') : null,
-						original: output,
-					});
-					break;
-			}
+					return {
+						id: tool_call.id,
+						name: tool_call.function.name,
+						arguments: tool_call.function.arguments ? JSON.parse(tool_call.function.arguments) : {},
+					};
+				}),
+			});
 		}
 
 		return [
@@ -166,6 +122,7 @@ export default class OpenAIModel extends Model {
 					messages.push({
 						role,
 						content: c.content,
+						name: message.name,
 					});
 					break;
 
@@ -181,6 +138,7 @@ export default class OpenAIModel extends Model {
 								},
 							},
 						],
+						name: message.name,
 					});
 					break;
 
@@ -202,11 +160,13 @@ export default class OpenAIModel extends Model {
 									},
 								},
 							],
+							name: message.name,
 						});
 					} else if (c.content.transcription) {
 						messages.push({
 							role,
 							content: '[transcribed] ' + c.content.transcription,
+							name: message.name,
 						});
 					} else {
 						throw new Error('Audio content is not supported by this model');
@@ -216,15 +176,22 @@ export default class OpenAIModel extends Model {
 				case 'function':
 					if (model.tools) {
 						messages.push({
-							type: 'function_call',
-							call_id: c.content[0].id,
-							name: c.content[0].name,
-							arguments: c.content[0].arguments ? JSON.stringify(c.content[0].arguments) : '{}',
+							role,
+							name: message.name,
+							tool_calls: c.content.map(tool_call => ({
+								id: tool_call.id,
+								type: 'function',
+								function: {
+									name: tool_call.name,
+									arguments: tool_call.arguments ? JSON.stringify(tool_call.arguments) : '{}',
+								},
+							})),
 						});
 					} else {
 						messages.push({
 							role,
 							content: c.content.map(f => '```CALL \n' + f.name + '\n' + JSON.stringify(f.arguments || {}) + '\n```').join("\n\n"),
+							name: message.name,
 						});
 					}
 					break;
@@ -232,20 +199,18 @@ export default class OpenAIModel extends Model {
 				case 'function_response':
 					if (model.tools) {
 						messages.push({
-							type: 'function_call_output',
-							call_id: c.content.id,
-							output: JSON.stringify(c.content.response),
+							role,
+							tool_call_id: c.content.id,
+							content: JSON.stringify(c.content.response),
+							name: message.name,
 						});
 					} else {
 						messages.push({
 							role: 'user',
 							content: 'FUNCTION RESPONSE:\n' + JSON.stringify(c.content.response),
+							name: message.name,
 						});
 					}
-					break;
-
-				case 'reasoning':
-					messages.push(c.original);
 					break;
 
 				default:
