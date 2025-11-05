@@ -114,6 +114,24 @@ export default class OpenAIModel extends Model {
 					message_content.push({type: 'text', content: text});
 					break;
 
+				case 'image_generation_call':
+					const mime = output.output_format === 'png' ? 'image/png' : 'image/jpeg';
+					message_content.push({
+						type: 'image',
+						source: {
+							type: 'base64',
+							media_type: mime,
+							data: output.result,
+						},
+						meta: {
+							id: output.id,
+							status: output.status,
+							prompt: output.revised_prompt,
+							size: output.size,
+						},
+					});
+					break;
+
 				case 'function_call':
 					message_content.push({
 						type: 'function',
@@ -173,12 +191,15 @@ export default class OpenAIModel extends Model {
 					messages.push({
 						role,
 						content: [
-							{
-								type: 'image_url',
-								image_url: {
-									url: c.content.type === 'base64' ? 'data:' + c.content.mime + ';base64,' + c.content.data : c.content.data,
-									detail: c.content.detail || 'auto',
-								},
+							c.meta.id ? {
+								type: 'image_generation_call',
+								id: c.meta.id,
+								result: c.source.data,
+								status: c.meta.status,
+							} : {
+								type: 'input_image',
+								image_url: c.content.type === 'base64' ? 'data:' + c.content.mime + ';base64,' + c.content.data : c.content.data,
+								detail: c.content.detail || 'auto',
 							},
 						],
 					});
