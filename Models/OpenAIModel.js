@@ -70,7 +70,7 @@ export default class OpenAIModel extends Model {
 
 		const convertedMessages = [];
 		for (let m of messages)
-			convertedMessages.push(...this.convertMessage(m, model));
+			convertedMessages.push(...(await this.convertMessage(m, model)));
 
 		const tools = functions.map(f => ({
 			type: 'function',
@@ -118,9 +118,9 @@ export default class OpenAIModel extends Model {
 					const mime = output.output_format === 'png' ? 'image/png' : 'image/jpeg';
 					message_content.push({
 						type: 'image',
-						source: {
+						content: {
 							type: 'base64',
-							media_type: mime,
+							mime,
 							data: output.result,
 						},
 						meta: {
@@ -174,7 +174,7 @@ export default class OpenAIModel extends Model {
 		}
 	}
 
-	convertMessage(message, model) {
+	async convertMessage(message, model) {
 		const messages = [],
 			role = message.role === 'system' ? this.system_role_name : message.role;
 
@@ -188,16 +188,30 @@ export default class OpenAIModel extends Model {
 					break;
 
 				case 'image':
-					messages.push(c.meta.id ? {
-						type: 'image_generation_call',
-						id: c.meta.id,
-						result: c.source.data,
-						status: c.meta.status,
-					} : {
-						type: 'input_image',
-						image_url: c.content.type === 'base64' ? 'data:' + c.content.mime + ';base64,' + c.content.data : c.content.data,
-						detail: c.content.detail || 'auto',
-					});
+					if (c.meta.id) { // From model image generation
+						let base64;
+						if (c.content.type === 'base64') {
+							base64 = c.content.data;
+						} else {
+							// Fetch image and convert to base64
+							const response = await fetch(c.content.data);
+							const buffer = await response.arrayBuffer();
+							base64 = Buffer.from(buffer).toString('base64');
+						}
+
+						messages.push({
+							type: 'image_generation_call',
+							id: c.meta.id,
+							result: base64,
+							status: c.meta.status,
+						});
+					} else {
+						messages.push({
+							type: 'input_image',
+							image_url: c.content.type === 'base64' ? 'data:' + c.content.mime + ';base64,' + c.content.data : c.content.data,
+							detail: c.content.detail || 'auto',
+						});
+					}
 					break;
 
 				case 'audio':
