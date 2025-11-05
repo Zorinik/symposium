@@ -188,20 +188,15 @@ export default class OpenAIModel extends Model {
 					break;
 
 				case 'image':
-					messages.push({
-						role,
-						content: [
-							c.meta.id ? {
-								type: 'image_generation_call',
-								id: c.meta.id,
-								result: c.source.data,
-								status: c.meta.status,
-							} : {
-								type: 'input_image',
-								image_url: c.content.type === 'base64' ? 'data:' + c.content.mime + ';base64,' + c.content.data : c.content.data,
-								detail: c.content.detail || 'auto',
-							},
-						],
+					messages.push(c.meta.id ? {
+						type: 'image_generation_call',
+						id: c.meta.id,
+						result: c.source.data,
+						status: c.meta.status,
+					} : {
+						type: 'input_image',
+						image_url: c.content.type === 'base64' ? 'data:' + c.content.mime + ';base64,' + c.content.data : c.content.data,
+						detail: c.content.detail || 'auto',
 					});
 					break;
 
