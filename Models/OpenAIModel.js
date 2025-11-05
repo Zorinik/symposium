@@ -188,7 +188,7 @@ export default class OpenAIModel extends Model {
 					break;
 
 				case 'image':
-					if (c.meta.id) { // From model image generation
+					if (c.meta?.id) { // From model image generation
 						let base64;
 						if (c.content.type === 'base64') {
 							base64 = c.content.data;
