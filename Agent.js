@@ -256,7 +256,8 @@ export default class Agent {
 					for (let message of completion) {
 						if (message.role === 'assistant' && message.content.some(c => c.type === 'reasoning')) {
 							const reasoning = message.content.find(c => c.type === 'reasoning').content;
-							emitter.emit('reasoning', reasoning);
+							if (reasoning)
+								emitter.emit('reasoning', reasoning);
 						}
 					}
 
@@ -410,7 +411,11 @@ export default class Agent {
 								return {type: 'response', value: this.afterHandle(thread, completion, JSON.parse(m.content))};
 						}
 
-						emitter.emit('output', m.content);
+						emitter.emit('output', m);
+						break;
+
+					case 'image':
+						emitter.emit('output', m);
 						break;
 
 					case 'function':

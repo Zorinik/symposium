@@ -129,15 +129,23 @@ async function main() {
 
 	const emitter = await agent.message('Hello, who are you?');
 
-	emitter.on('output', (content) => {
-		process.stdout.write(content);
+	emitter.on('output', message => {
+		switch (message.type) {
+            case 'text':
+	            process.stdout.write(message.content);
+				break;
+
+            case 'image':
+                // Process image
+                break;
+        }
 	});
 
-	emitter.on('error', (error) => {
+	emitter.on('error', error => {
 		console.error(`\nAn error occurred: ${error.message}`);
 	});
 
-	emitter.on('tool', (tool) => {
+	emitter.on('tool', tool => {
 		console.log(`\n> Using tool: ${tool.name} with arguments ${JSON.stringify(tool.arguments)}\n`);
 	});
 
