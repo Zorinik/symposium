@@ -207,9 +207,14 @@ export default class OpenAIModel extends Model {
 						});
 					} else {
 						messages.push({
-							type: 'input_image',
-							image_url: c.content.type === 'base64' ? 'data:' + c.content.mime + ';base64,' + c.content.data : c.content.data,
-							detail: c.content.detail || 'auto',
+							role,
+							content: [
+								{
+									type: 'input_image',
+									image_url: c.content.type === 'base64' ? 'data:' + c.content.mime + ';base64,' + c.content.data : c.content.data,
+									detail: c.content.detail || 'auto',
+								},
+							],
 						});
 					}
 					break;
