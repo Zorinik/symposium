@@ -24,7 +24,7 @@ export default class Agent {
 	initialized = false;
 	enable_image_generation = false;
 
-	constructor(options) {
+	constructor(options = {}) {
 		this.options = {
 			memory_handler: null,
 			...options,
