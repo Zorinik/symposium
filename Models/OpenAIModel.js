@@ -31,6 +31,15 @@ export default class OpenAIModel extends Model {
 				tools: true,
 				structured_output: true,
 			}],
+			['gpt-5.1', {
+				name: 'gpt-5.1',
+				tiktoken: 'gpt-4',
+				tokens: 400000,
+				tools: true,
+				structured_output: true,
+				audio: true,
+				image_generation: true,
+			}],
 		]);
 	}
 
