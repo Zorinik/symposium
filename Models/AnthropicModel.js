@@ -32,6 +32,11 @@ export default class AnthropicModel extends Model {
 				tokens: 200000,
 				tools: true,
 			}],
+			['claude-4.5-opus', {
+				name: 'claude-opus-4-5-20251101',
+				tokens: 200000,
+				tools: true,
+			}],
 		]);
 	}
 

@@ -40,6 +40,15 @@ export default class OpenAIModel extends Model {
 				audio: true,
 				image_generation: true,
 			}],
+			['gpt-5.2', {
+				name: 'gpt-5.2',
+				tiktoken: 'gpt-4',
+				tokens: 400000,
+				tools: true,
+				structured_output: true,
+				audio: true,
+				image_generation: true,
+			}],
 		]);
 	}
 
