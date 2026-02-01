@@ -4,9 +4,14 @@ import OpenAI from "openai";
 export default class GrokModel extends LegacyOpenAIModel {
 	async getModels() {
 		return new Map([
-			['grok-4', {
-				name: 'grok-4',
-				tokens: 256000,
+			['grok-4-1-fast-reasoning', {
+				name: 'grok-4-1-fast-reasoning',
+				tokens: 2000000,
+				tools: true,
+			}],
+			['grok-4-1-fast-non-reasoning', {
+				name: 'grok-4-1-fast-non-reasoning',
+				tokens: 2000000,
 				tools: true,
 			}],
 		]);
