@@ -50,7 +50,7 @@ export default class GrokModel extends LegacyOpenAIModel {
 				const generation_call = function_call.content.find(f => f.name === 'generate_image');
 				if (generation_call) {
 					const response = await this.getOpenAi().images.generate({
-						model: 'grok-2-image',
+						model: 'grok-imagine-image',
 						prompt: generation_call.arguments.prompt,
 					});
 
