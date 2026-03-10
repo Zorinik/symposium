@@ -1,0 +1,76 @@
+{
+	"hooks": {
+		"SessionStart": [
+			{
+				"matcher": "*",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node \"C:/Users/zorin/.octavius/hooks/claude-status-hook.mjs\"",
+						"async": true
+					}
+				]
+			}
+		],
+		"UserPromptSubmit": [
+			{
+				"matcher": "*",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node \"C:/Users/zorin/.octavius/hooks/claude-status-hook.mjs\"",
+						"async": true
+					}
+				]
+			}
+		],
+		"PreToolUse": [
+			{
+				"matcher": "*",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node \"C:/Users/zorin/.octavius/hooks/claude-status-hook.mjs\"",
+						"async": true
+					}
+				]
+			}
+		],
+		"Notification": [
+			{
+				"matcher": "*",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node \"C:/Users/zorin/.octavius/hooks/claude-status-hook.mjs\"",
+						"async": true
+					}
+				]
+			}
+		],
+		"Stop": [
+			{
+				"matcher": "*",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node \"C:/Users/zorin/.octavius/hooks/claude-status-hook.mjs\"",
+						"async": true
+					}
+				]
+			}
+		],
+		"SessionEnd": [
+			{
+				"matcher": "*",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node \"C:/Users/zorin/.octavius/hooks/claude-status-hook.mjs\"",
+						"async": true
+					}
+				]
+			}
+		]
+	}
+}
