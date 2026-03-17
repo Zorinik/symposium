@@ -14,6 +14,16 @@ export default class GrokModel extends LegacyOpenAIModel {
 				tokens: 2000000,
 				tools: true,
 			}],
+			['grok-4-20-fast-reasoning', {
+				name: 'grok-4.20-beta-0309-reasoning',
+				tokens: 2000000,
+				tools: true,
+			}],
+			['grok-4-20-fast-non-reasoning', {
+				name: 'grok-4.20-beta-0309-non-reasoning',
+				tokens: 2000000,
+				tools: true,
+			}],
 		]);
 	}
 
