@@ -188,6 +188,18 @@ ${context_string}
 		await this.log('user_message', content);
 		thread.addMessage('user', content);
 
+		return this.trigger(thread);
+	}
+
+	async trigger(thread = null) {
+		if (!this.initialized)
+			throw new Error('Agent not initialized');
+
+		if (thread === null)
+			thread = uuid();
+		if (typeof thread !== 'object')
+			thread = await this.getThread(thread);
+
 		const emitter = new BufferedEventEmitter();
 		emitter.emit('start', thread);
 
