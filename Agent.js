@@ -355,10 +355,16 @@ ${context_string}
 	async generateCompletion(thread, options = {}, retry_counter = 1) {
 		try {
 			const model = Symposium.getModel(thread.state.model);
-			const messages = await model.class.generate(model, thread, await this.getFunctions(), {
+			const it = model.class.generate(model, thread, await this.getFunctions(), {
 				...options,
 				image_generation: this.enable_image_generation,
 			});
+			// Phase 1 bridge: drain the async generator; deltas are discarded here and will be
+			// forwarded by the upcoming Phase 2 refactor. The generator's return value is the Message[].
+			let step = await it.next();
+			while (!step.done)
+				step = await it.next();
+			const messages = step.value;
 			return model.tools ? messages : messages.map(m => this.parseFunctions(m));
 		} catch (error) {
 			if (error.response) {

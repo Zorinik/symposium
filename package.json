@@ -6,6 +6,9 @@
   "main": "index.js",
   "author": "Domenico Giambra",
   "license": "ISC",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\""
+  },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.79.0",
     "groq-sdk": "^1.0.0",

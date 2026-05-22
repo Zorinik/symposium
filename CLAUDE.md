@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Symposium is a Node.js framework (ES modules, Node ≥18) for building LLM-powered agents. Published as the `symposium` npm package; consumed as a library, not a runnable app. There is no build, lint, or test tooling configured — `package.json` only defines dependencies.
+Symposium is a Node.js framework (ES modules, Node ≥18) for building LLM-powered agents. Published as the `symposium` npm package; consumed as a library, not a runnable app. No build or lint tooling. Test suite uses the built-in `node:test` runner — run with `npm test` (script: `node --test "test/**/*.test.js"`). Tests live under `test/` and mock provider SDKs to validate the model layer's streaming behavior without network access.
 
 ## Architecture
 
@@ -33,7 +33,7 @@ Tool authorization is two-phase: `Tool.authorize()` runs before the call; if it 
 
 Every provider extends `Model` and implements:
 - `getModels()` — returns `Map<label, definition>` where definition flags capabilities: `tools`, `structured_output`, `audio`, `image_generation`, `tokens` (context window), `tiktoken` (encoding name).
-- `generate(model, thread, functions, options)` — returns an array of assistant messages.
+- `generate(model, thread, functions, options)` — **async generator** (Phase 1 of v3 refactor). Yields streaming deltas during generation and `return`s the final assembled `Message[]`. Delta union: `{type: 'text_delta', content}`, `{type: 'reasoning_delta', content}`, `{type: 'tool_call', content: {id?, name, arguments}}` (emitted complete), `{type: 'image', content, meta}`. The agent currently drains the generator in `Agent.generateCompletion()` and uses only the return value; Phase 2 will forward deltas to consumers. Tool-call deltas from chat-completions-style APIs (OpenAI legacy, Groq) are accumulated per `index` and yielded once at end-of-stream.
 - Optionally `countTokens(thread)` (used by `Summarizer`).
 
 A model definition's `tools: true` means the provider supports native function calling. When false, `Agent.parseFunctions()` falls back to parsing `\`\`\`\nCALL <name>\n<json>\n\`\`\`` blocks out of plain text — the prompt for this is built by `Model.promptFromFunctions()` (in Italian; do not translate without verifying the existing parser still matches).

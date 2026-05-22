@@ -3,9 +3,13 @@ import Model from "../Model.js";
 import Message from "../Message.js";
 
 export default class OllamaModel extends Model {
+	getOllama() {
+		return ollama;
+	}
+
 	async getModels() {
 		try {
-			const {models} = await ollama.list();
+			const {models} = await this.getOllama().list();
 
 			const map = new Map();
 
@@ -25,7 +29,7 @@ export default class OllamaModel extends Model {
 		}
 	}
 
-	async generate(model, thread, functions = [], options = {}) {
+	async *generate(model, thread, functions = [], options = {}) {
 		const parsed = this.parseOptions(options, functions);
 		options = parsed.options;
 		functions = parsed.functions;
@@ -63,6 +67,7 @@ export default class OllamaModel extends Model {
 				type: 'function',
 				function: f,
 			})),
+			stream: true,
 		};
 
 		if (options.force_function) {
@@ -81,30 +86,51 @@ export default class OllamaModel extends Model {
 		if (!completion_payload.tools.length)
 			delete completion_payload.tools;
 
-		const chatCompletion = await ollama.chat(completion_payload);
-		const completion = chatCompletion.message;
+		const stream = await this.getOllama().chat(completion_payload);
 
-		const message_content = [];
-		if (completion.thinking)
-			message_content.push({type: 'reasoning', content: completion.thinking});
+		let fullText = '';
+		let fullThinking = '';
+		const toolCalls = [];
 
-		if (completion.content)
-			message_content.push({type: 'text', content: completion.content});
+		for await (const chunk of stream) {
+			const m = chunk.message;
+			if (!m)
+				continue;
 
-		if (completion.tool_calls?.length) {
-			message_content.push({
-				type: 'function',
-				content: completion.tool_calls.map(tool_call => {
+			if (m.thinking) {
+				fullThinking += m.thinking;
+				yield {type: 'reasoning_delta', content: m.thinking};
+			}
+
+			if (m.content) {
+				fullText += m.content;
+				yield {type: 'text_delta', content: m.content};
+			}
+
+			if (m.tool_calls?.length) {
+				for (const tool_call of m.tool_calls) {
 					if (!tool_call.function)
 						throw new Error('Unsupported tool type');
 
-					return {
+					const tc = {
 						name: tool_call.function.name,
 						arguments: tool_call.function.arguments || {},
 					};
-				}),
-			});
+					toolCalls.push(tc);
+					yield {type: 'tool_call', content: tc};
+				}
+			}
 		}
+
+		const message_content = [];
+		if (fullThinking)
+			message_content.push({type: 'reasoning', content: fullThinking});
+
+		if (fullText)
+			message_content.push({type: 'text', content: fullText});
+
+		if (toolCalls.length)
+			message_content.push({type: 'function', content: toolCalls});
 
 		return [
 			new Message('assistant', message_content),

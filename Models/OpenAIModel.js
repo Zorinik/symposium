@@ -77,7 +77,7 @@ export default class OpenAIModel extends Model {
 		return this.openai;
 	}
 
-	async generate(model, thread, functions = [], options = {}) {
+	async *generate(model, thread, functions = [], options = {}) {
 		const parsed = this.parseOptions(options, functions);
 		options = parsed.options;
 		functions = parsed.functions;
@@ -140,7 +140,52 @@ export default class OpenAIModel extends Model {
 		if (!completion_payload.tools.length)
 			delete completion_payload.tools;
 
-		const completion = await this.getOpenAi().responses.create(completion_payload);
+		const stream = this.getOpenAi().responses.stream(completion_payload);
+
+		for await (const event of stream) {
+			switch (event.type) {
+				case 'response.output_text.delta':
+					if (event.delta)
+						yield {type: 'text_delta', content: event.delta};
+					break;
+
+				case 'response.reasoning_summary_text.delta':
+					if (event.delta)
+						yield {type: 'reasoning_delta', content: event.delta};
+					break;
+
+				case 'response.output_item.done':
+					if (event.item?.type === 'function_call') {
+						yield {
+							type: 'tool_call',
+							content: {
+								id: event.item.call_id,
+								name: event.item.name,
+								arguments: event.item.arguments ? JSON.parse(event.item.arguments) : {},
+							},
+						};
+					} else if (event.item?.type === 'image_generation_call') {
+						const mime = event.item.output_format === 'png' ? 'image/png' : 'image/jpeg';
+						yield {
+							type: 'image',
+							content: {
+								type: 'base64',
+								mime,
+								data: event.item.result,
+							},
+							meta: {
+								id: event.item.id,
+								status: event.item.status,
+								prompt: event.item.revised_prompt,
+								size: event.item.size,
+							},
+						};
+					}
+					break;
+			}
+		}
+
+		const completion = await stream.finalResponse();
 
 		const message_content = [];
 		for (let output of completion.output) {

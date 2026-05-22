@@ -47,7 +47,7 @@ export default class AnthropicModel extends Model {
 		return this.anthropic;
 	}
 
-	async generate(model, thread, functions = [], options = {}) {
+	async *generate(model, thread, functions = [], options = {}) {
 		try {
 			const parsed = this.parseOptions(options, functions);
 			options = parsed.options;
@@ -90,7 +90,53 @@ export default class AnthropicModel extends Model {
 				delete completion_payload.betas;
 			}
 
-			const message = await this.getAnthropic().beta.messages.create(completion_payload);
+			const stream = this.getAnthropic().beta.messages.stream(completion_payload);
+
+			const toolBuffers = new Map();
+
+			for await (const event of stream) {
+				switch (event.type) {
+					case 'content_block_start':
+						if (event.content_block?.type === 'tool_use') {
+							toolBuffers.set(event.index, {
+								id: event.content_block.id,
+								name: event.content_block.name,
+								arguments: '',
+							});
+						}
+						break;
+
+					case 'content_block_delta':
+						if (event.delta?.type === 'text_delta' && event.delta.text)
+							yield {type: 'text_delta', content: event.delta.text};
+						else if (event.delta?.type === 'thinking_delta' && event.delta.thinking)
+							yield {type: 'reasoning_delta', content: event.delta.thinking};
+						else if (event.delta?.type === 'input_json_delta') {
+							const buf = toolBuffers.get(event.index);
+							if (buf)
+								buf.arguments += event.delta.partial_json || '';
+						}
+						break;
+
+					case 'content_block_stop': {
+						const buf = toolBuffers.get(event.index);
+						if (buf) {
+							yield {
+								type: 'tool_call',
+								content: {
+									id: buf.id,
+									name: buf.name,
+									arguments: buf.arguments ? JSON.parse(buf.arguments) : {},
+								},
+							};
+							toolBuffers.delete(event.index);
+						}
+						break;
+					}
+				}
+			}
+
+			const message = await stream.finalMessage();
 
 			const message_content = [];
 			if (message.content) {
@@ -135,7 +181,7 @@ export default class AnthropicModel extends Model {
 				console.warn('Rate limite exceeded for Anthropic API, waiting 60 seconds...');
 				await new Promise(resolve => setTimeout(resolve, 60000));
 				if ((options.counter || 0) < 3)
-					return this.generate(model, thread, functions, {...options, counter: (options.counter || 0) + 1});
+					return yield* this.generate(model, thread, functions, {...options, counter: (options.counter || 0) + 1});
 				else
 					throw new Error('Rate limit exceeded for Anthropic API, aborting.');
 			}

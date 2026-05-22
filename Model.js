@@ -7,7 +7,14 @@ export default class Model {
 		return new Map();
 	}
 
-	async generate(model, thread, functions = [], options = {}) {
+	async *generate(model, thread, functions = [], options = {}) {
+		// Subclasses implement as async generator: yield deltas during streaming,
+		// return assembled Message[] when complete.
+		// Delta shape:
+		//   {type: 'text_delta',      content: string}
+		//   {type: 'reasoning_delta', content: string}
+		//   {type: 'tool_call',       content: {id?, name, arguments}}
+		//   {type: 'image',           content: <image-block-content>, meta}
 		return null;
 	}
 

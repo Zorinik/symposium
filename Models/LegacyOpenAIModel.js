@@ -17,7 +17,7 @@ export default class LegacyOpenAIModel extends Model {
 		return this.openai;
 	}
 
-	async generate(model, thread, functions = [], options = {}) {
+	async *generate(model, thread, functions = [], options = {}) {
 		const parsed = this.parseOptions(options, functions);
 		options = parsed.options;
 		functions = parsed.functions;
@@ -70,28 +70,54 @@ export default class LegacyOpenAIModel extends Model {
 		if (!completion_payload.tools.length)
 			delete completion_payload.tools;
 
-		const chatCompletion = await this.getOpenAi().chat.completions.create(completion_payload);
-		const completion = chatCompletion.choices[0].message;
+		const stream = await this.getOpenAi().chat.completions.create({...completion_payload, stream: true});
+
+		let fullText = '';
+		const toolBuffer = new Map();
+
+		for await (const chunk of stream) {
+			const delta = chunk.choices?.[0]?.delta;
+			if (!delta)
+				continue;
+
+			if (delta.content) {
+				fullText += delta.content;
+				yield {type: 'text_delta', content: delta.content};
+			}
+
+			if (delta.tool_calls) {
+				for (const tc of delta.tool_calls) {
+					const idx = tc.index;
+					if (!toolBuffer.has(idx))
+						toolBuffer.set(idx, {id: '', name: '', argumentsRaw: ''});
+					const buf = toolBuffer.get(idx);
+					if (tc.id)
+						buf.id = tc.id;
+					if (tc.function?.name)
+						buf.name = tc.function.name;
+					if (tc.function?.arguments)
+						buf.argumentsRaw += tc.function.arguments;
+				}
+			}
+		}
+
+		const toolCalls = [];
+		for (const [, buf] of [...toolBuffer.entries()].sort((a, b) => a[0] - b[0])) {
+			const tc = {
+				id: buf.id,
+				name: buf.name,
+				arguments: buf.argumentsRaw ? JSON.parse(buf.argumentsRaw) : {},
+			};
+			toolCalls.push(tc);
+			yield {type: 'tool_call', content: tc};
+		}
 
 		const message_content = [];
-		if (completion.content)
-			message_content.push({type: 'text', content: completion.content});
+		if (fullText)
+			message_content.push({type: 'text', content: fullText});
 
-		if (completion.tool_calls?.length) {
-			message_content.push({
-				type: 'function',
-				content: completion.tool_calls.map(tool_call => {
-					if (tool_call.type !== 'function')
-						throw new Error('Unsupported tool type ' + tool_call.type);
-
-					return {
-						id: tool_call.id,
-						name: tool_call.function.name,
-						arguments: tool_call.function.arguments ? JSON.parse(tool_call.function.arguments) : {},
-					};
-				}),
-			});
-		}
+		if (toolCalls.length)
+			message_content.push({type: 'function', content: toolCalls});
 
 		return [
 			new Message('assistant', message_content),
