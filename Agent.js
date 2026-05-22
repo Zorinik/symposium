@@ -1,7 +1,5 @@
 import {v7 as uuid} from 'uuid';
 
-import BufferedEventEmitter from "./BufferedEventEmitter.js";
-
 import Symposium from "./Symposium.js";
 import Thread from "./Thread.js";
 import Tool from "./Tool.js";
@@ -31,6 +29,7 @@ export default class Agent {
 		};
 
 		this.threads = new Map();
+		this._pendingAuth = new Map();
 	}
 
 	async init() {
@@ -165,7 +164,7 @@ ${context_string}
 		return thread;
 	}
 
-	async message(content, thread = null) {
+	async *message(content, thread = null) {
 		if (!this.initialized)
 			throw new Error('Agent not initialized');
 
@@ -188,10 +187,10 @@ ${context_string}
 		await this.log('user_message', content);
 		thread.addMessage('user', content);
 
-		return this.trigger(thread);
+		yield* this.trigger(thread);
 	}
 
-	async trigger(thread = null) {
+	async *trigger(thread = null) {
 		if (!this.initialized)
 			throw new Error('Agent not initialized');
 
@@ -200,119 +199,96 @@ ${context_string}
 		if (typeof thread !== 'object')
 			thread = await this.getThread(thread);
 
-		const emitter = new BufferedEventEmitter();
-		emitter.emit('start', thread);
-
-		return this.execute(thread, emitter);
+		yield {type: 'start', thread};
+		try {
+			yield* this.execute(thread);
+		} finally {
+			yield {type: 'end', thread};
+		}
 	}
 
-	async beforeExecute(thread, emitter) {
+	async beforeExecute(thread) {
 		if (this.options.memory_handler)
 			thread = await this.options.memory_handler.handle(thread);
 		return thread;
 	}
 
-	async execute(thread, emitter, counter = 0) {
-		const execution = new Promise(async (resolve, reject) => {
+	async *execute(thread) {
+		thread = await this.beforeExecute(thread);
+
+		const model = Symposium.getModel(thread.state.model);
+
+		const completion_options = {};
+		if (this.type === 'utility') {
+			if (['function', 'json'].includes(this.utility.type)) {
+				if (!this.utility.function || !this.utility.function.name || !this.utility.function.parameters)
+					throw new Error('Bad function definition');
+
+				let response_format = null;
+				if (this.utility.type === 'json' && model.structured_output)
+					response_format = this.convertFunctionToResponseFormat(this.utility.function.parameters);
+
+				if (response_format && response_format.count <= 100) { // OpenAI does not support structured output if there are more than 100 parameters
+					completion_options.response_format = {
+						type: 'json_schema',
+						name: this.utility.function.name,
+						schema: response_format.obj,
+						strict: true,
+					};
+				} else {
+					completion_options.functions = [
+						this.utility.function,
+					];
+					completion_options.force_function = this.utility.function.name;
+				}
+			}
+		}
+
+		let counter = 0;
+		while (true) {
+			const completion = yield* this.generateCompletion(thread, completion_options);
+
 			try {
-				if (counter === 0)
-					thread = await this.beforeExecute(thread, emitter);
+				thread = await this.afterExecute(thread, completion);
 
-				const model = Symposium.getModel(thread.state.model);
-
-				const completion_options = {};
-				if (this.type === 'utility') {
-					if (['function', 'json'].includes(this.utility.type)) {
-						if (!this.utility.function || !this.utility.function.name || !this.utility.function.parameters)
-							throw new Error('Bad function definition');
-
-						let response_format = null;
-						if (this.utility.type === 'json' && model.structured_output)
-							response_format = this.convertFunctionToResponseFormat(this.utility.function.parameters);
-
-						if (response_format && response_format.count <= 100) { // OpenAI does not support structured output if there are more than 100 parameters
-							completion_options.response_format = {
-								type: 'json_schema',
-								name: this.utility.function.name,
-								schema: response_format.obj,
-								strict: true,
-							};
-						} else {
-							completion_options.functions = [
-								this.utility.function,
-							];
-							completion_options.force_function = this.utility.function.name;
-						}
+				for (let message of completion) {
+					if (message.role === 'assistant' && message.content.some(c => c.type === 'reasoning')) {
+						const reasoning = message.content.find(c => c.type === 'reasoning').content;
+						if (reasoning)
+							yield {type: 'reasoning', content: reasoning};
 					}
 				}
 
-				let completion;
-				try {
-					completion = await this.generateCompletion(thread, completion_options);
-				} catch (e) {
-					console.error(e.message);
-					switch (this.type) {
-						case 'chat':
-							emitter.emit('error', e.message);
-							return resolve(e);
+				const verdict = yield* this.handleCompletion(thread, completion);
 
-						case 'utility':
-							throw e;
+				switch (this.type) {
+					case 'utility':
+						if (verdict.type !== 'response')
+							throw new Error('Utility agent did not return a response');
 
-						default:
-							throw new Error('Bad agent type');
-					}
-				}
+						yield {type: 'result', value: verdict.value};
+						return;
 
-				try {
-					thread = await this.afterExecute(thread, completion, emitter);
-
-					for (let message of completion) {
-						if (message.role === 'assistant' && message.content.some(c => c.type === 'reasoning')) {
-							const reasoning = message.content.find(c => c.type === 'reasoning').content;
-							if (reasoning)
-								emitter.emit('reasoning', reasoning);
+					case 'chat':
+						if (verdict?.type === 'continue') {
+							counter = 0;
+							continue;
 						}
-					}
+						return;
 
-					const response = await this.handleCompletion(thread, completion, emitter);
-
-					switch (this.type) {
-						case 'utility':
-							if (response.type !== 'response')
-								throw new Error('Utility agent did not return a response');
-
-							return resolve(response.value);
-
-						case 'chat':
-							if (response?.type === 'continue')
-								return this.execute(thread, emitter);
-
-							return resolve(null);
-
-						default:
-							throw new Error('Bad agent type');
-					}
-				} catch (e) {
-					console.error(e);
-
-					if (counter < this.max_retries) {
-						await this.execute(thread, emitter, counter + 1)
-							.then(response => resolve(response))
-							.catch(err => reject(err));
-					} else {
-						throw e;
-					}
+					default:
+						throw new Error('Bad agent type');
 				}
 			} catch (e) {
-				reject(e);
-			}
-		}).then(value => {
-			emitter.emit('end', thread);
-			return value;
-		});
+				console.error(e);
 
-		return this.type === 'chat' ? emitter : execution;
+				if (counter < this.max_retries) {
+					counter++;
+					continue;
+				}
+				throw e;
+			}
+		}
 	}
 
 	convertFunctionToResponseFormat(obj) {
@@ -348,44 +324,51 @@ ${context_string}
 		};
 	}
 
-	async afterExecute(thread, completion, emitter) {
+	async afterExecute(thread, completion) {
 		return thread;
 	}
 
-	async generateCompletion(thread, options = {}, retry_counter = 1) {
+	async *generateCompletion(thread, options = {}, retry_counter = 1) {
+		const model = Symposium.getModel(thread.state.model);
+		const it = model.class.generate(model, thread, await this.getFunctions(), {
+			...options,
+			image_generation: this.enable_image_generation,
+		});
+
+		let messages;
+		let yielded = false;
 		try {
-			const model = Symposium.getModel(thread.state.model);
-			const it = model.class.generate(model, thread, await this.getFunctions(), {
-				...options,
-				image_generation: this.enable_image_generation,
-			});
-			// Phase 1 bridge: drain the async generator; deltas are discarded here and will be
-			// forwarded by the upcoming Phase 2 refactor. The generator's return value is the Message[].
 			let step = await it.next();
-			while (!step.done)
+			while (!step.done) {
+				const delta = step.value;
+				if (delta && delta.type === 'text_delta') {
+					yield {type: 'chunk', content: delta.content};
+					yielded = true;
+				}
 				step = await it.next();
-			const messages = step.value;
-			return model.tools ? messages : messages.map(m => this.parseFunctions(m));
+			}
+			messages = step.value;
 		} catch (error) {
-			if (error.response) {
+			// Retry transport-level errors only if we haven't yielded any chunk yet.
+			if (!yielded && error.response) {
 				console.error(error.response.status);
 				console.error(error.response.data);
 
 				if (error.response.status >= 500 && retry_counter <= this.max_retries) {
-					await new Promise(resolve => {
-						setTimeout(resolve, 1000);
-					});
-
-					return this.generateCompletion(thread, options, retry_counter + 1);
+					await new Promise(resolve => setTimeout(resolve, 1000));
+					return yield* this.generateCompletion(thread, options, retry_counter + 1);
 				}
 
 				throw new Error(error.response.status + ': ' + JSON.stringify(error.response.data));
-			} else if (error.message) {
-				throw new Error(error.message);
-			} else {
-				throw new Error('Errore interno');
 			}
+			if (!yielded && error.message)
+				throw new Error(error.message);
+			if (!yielded)
+				throw new Error('Errore interno');
+			throw error;
 		}
+
+		return model.tools ? messages : messages.map(m => this.parseFunctions(m));
 	}
 
 	parseFunctions(message) {
@@ -413,7 +396,7 @@ ${context_string}
 		return message;
 	}
 
-	async handleCompletion(thread, completion, emitter) {
+	async *handleCompletion(thread, completion) {
 		const model = Symposium.getModel(thread.state.model);
 
 		const functions = [];
@@ -426,16 +409,16 @@ ${context_string}
 					case 'text':
 						if (this.type === 'utility') {
 							if (this.utility.type === 'text')
-								return {type: 'response', value: this.afterHandle(thread, completion, m.content)};
+								return {type: 'response', value: await this.afterHandle(thread, completion, m.content)};
 							if (this.utility.type === 'json' && model.structured_output)
-								return {type: 'response', value: this.afterHandle(thread, completion, JSON.parse(m.content))};
+								return {type: 'response', value: await this.afterHandle(thread, completion, JSON.parse(m.content))};
 						}
 
-						emitter.emit('output', m);
+						yield {type: 'output', content: m};
 						break;
 
 					case 'image':
-						emitter.emit('output', m);
+						yield {type: 'output', content: m};
 						break;
 
 					case 'function':
@@ -448,9 +431,9 @@ ${context_string}
 
 		if (functions.length) {
 			if (this.utility && ['function', 'json'].includes(this.utility.type))
-				return {type: 'response', value: this.afterHandle(thread, completion, functions[0].arguments)};
+				return {type: 'response', value: await this.afterHandle(thread, completion, functions[0].arguments)};
 
-			return this.callFunctions(thread, emitter, completion, functions);
+			return yield* this.callFunctions(thread, completion, functions);
 		} else {
 			await thread.storeState();
 			await this.afterHandle(thread, completion);
@@ -458,13 +441,14 @@ ${context_string}
 		}
 	}
 
-	async confirmFunctions({thread, functions, completion, emitter}, always = false) {
-		const response = await this.callFunctions(thread, emitter, completion, functions, true, always);
-		if (response?.type === 'continue')
-			return this.execute(thread, emitter);
+	confirmFunctions(id, decision) {
+		const resolver = this._pendingAuth.get(id);
+		if (!resolver)
+			throw new Error('No pending authorization request with id ' + id);
+		resolver(decision);
 	}
 
-	async callFunctions(thread, emitter, completion, functions_to_call, authorize = false, authorize_always = false) {
+	async *callFunctions(thread, completion, functions_to_call) {
 		const functions = await this.getFunctions(false);
 
 		let is_authorized = true;
@@ -472,21 +456,41 @@ ${context_string}
 			if (!functions.has(f.name))
 				throw new Error('Unrecognized function ' + f.name);
 
-			if (authorize && authorize_always)
-				await functions.get(f.name).tool.authorizeAlways(thread, f.name, f.arguments);
-
-			if (!authorize && !(await functions.get(f.name).tool.authorize(thread, f.name, f.arguments))) {
+			if (!(await functions.get(f.name).tool.authorize(thread, f.name, f.arguments))) {
 				is_authorized = false;
 				break;
 			}
 		}
 
 		if (!is_authorized) {
-			emitter.emit('tools_auth', {thread, functions: functions_to_call, completion, emitter});
-			return {type: 'void'};
+			const id = uuid();
+			let resolver;
+			const pending = new Promise(resolve => { resolver = resolve; });
+			this._pendingAuth.set(id, resolver);
+
+			yield {type: 'tools_auth', id, functions: functions_to_call};
+
+			let decision;
+			try {
+				decision = await pending;
+			} finally {
+				this._pendingAuth.delete(id);
+			}
+
+			if (decision === 'reject')
+				return {type: 'void'};
+
+			if (decision === 'approve_always') {
+				for (let f of functions_to_call)
+					await functions.get(f.name).tool.authorizeAlways(thread, f.name, f.arguments);
+			} else if (decision !== 'approve') {
+				throw new Error('Bad authorization decision: ' + decision);
+			}
 		}
 
-		const responses = await Promise.all(functions_to_call.map(async f => this.callFunction(thread, functions, f, emitter)));
+		const responses = [];
+		for (let f of functions_to_call)
+			responses.push(yield* this.callFunction(thread, functions, f));
 
 		for (let response of responses) {
 			thread.addMessage('tool', [
@@ -532,16 +536,15 @@ ${context_string}
 			return this.functions;
 	}
 
-	async callFunction(thread, functions, function_call, emitter = null) {
+	async *callFunction(thread, functions, function_call) {
 		const function_definition = functions.get(function_call.name);
 
 		await this.log('function_call', function_call);
-		emitter.emit('tool', function_call);
+		yield {type: 'tool', id: function_call.id, name: function_call.name, arguments: function_call.arguments};
 
 		try {
 			const response = await function_definition.tool.callFunction(thread, function_call.name, function_call.arguments);
-			if (emitter)
-				emitter.emit('tool_response', {name: function_definition.tool.name, success: true, response});
+			yield {type: 'tool_response', name: function_definition.tool.name, success: true, response};
 
 			return {
 				type: 'response',
@@ -549,8 +552,7 @@ ${context_string}
 				function: function_call,
 			};
 		} catch (error) {
-			if (emitter)
-				emitter.emit('tool_response', {name: function_definition.tool.name, success: false, error: error.message || error});
+			yield {type: 'tool_response', name: function_definition.tool.name, success: false, error: error.message || error};
 
 			return {
 				type: 'response',
@@ -562,10 +564,6 @@ ${context_string}
 
 	async afterHandle(thread, completion, value = null) {
 		return value;
-	}
-
-	getEmitter() {
-		return new BufferedEventEmitter();
 	}
 
 	async setModel(thread, label) {

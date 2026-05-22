@@ -16,24 +16,26 @@ The framework is organized around a small set of cooperating classes at the repo
 
 Storage is optional; when present it must implement `init()`, `get(key)`, `set(key, value)`. Threads serialize themselves under `thread-<agent_name>-<thread_id>`.
 
-`Symposium.prompt(system, prompt, options)` is a shortcut: it instantiates a bare `Agent`, marks it as `utility`, and returns the response directly (bypassing the EventEmitter flow).
+`Symposium.prompt(system, prompt, options)` is a shortcut: it instantiates a bare `Agent`, marks it as `utility`, drains the agent's event generator, and returns the value carried by the final `{type:'result', value}` event.
 
 ### Agents (`Agent.js`)
 
-The execution core. Two `type` values change the contract:
+The execution core. `message()` and `trigger()` are **async generators** (Phase 2 of v3). The caller iterates with `for await (const ev of agent.message(...))`. Both `chat` and `utility` agents return generators; the difference is only in which events are yielded.
 
-- `chat` — `message()` / `trigger()` return a `BufferedEventEmitter`; the caller consumes streaming events. Errors are emitted, not thrown.
-- `utility` — same methods return a Promise that resolves to the final value. `utility.type` may be `text`, `function`, or `json`. For `json` with a structured-output-capable model AND ≤100 parameters, the agent uses OpenAI's `response_format: json_schema`; otherwise it falls back to a forced function call. See `convertFunctionToResponseFormat()` for the OpenAI-specific schema constraints (all properties forced to required, `additionalProperties: false`).
+- `chat` — yields the full event set (`start`, `chunk`, `output`, `reasoning`, `tool`, `tool_response`, `tools_auth`, `end`).
+- `utility` — yields only `start`, then a single `{type:'result', value}`, then `end`. `utility.type` may be `text`, `function`, or `json`. For `json` with a structured-output-capable model AND ≤100 parameters, the agent uses OpenAI's `response_format: json_schema`; otherwise it falls back to a forced function call. See `convertFunctionToResponseFormat()` for the OpenAI-specific schema constraints (all properties forced to required, `additionalProperties: false`). Phase 6 will add a direct-await convenience back for utility agents.
 
-The `execute()` loop is recursive with a `max_retries` (default 5) safety net: generate completion → `afterExecute` hook → emit reasoning → `handleCompletion` → if the assistant called functions, run them and recurse with `{type: 'continue'}`; otherwise resolve. Subclasses customize via `doInitThread`, `getDefaultState`, `beforeExecute`, `afterExecute`, `afterHandle`.
+The `execute()` loop is a `while (true)` inside an async generator with a `max_retries` (default 5) safety net wrapped around `afterExecute` → `handleCompletion`: generate completion (forwarding `text_delta` deltas as `{type:'chunk'}` events) → `afterExecute` hook → yield reasoning → `handleCompletion` → if the assistant called functions, run them via `callFunctions` and loop; otherwise return. Errors throw out of the generator naturally — there is no `error` event. Subclasses customize via `doInitThread`, `getDefaultState`, `beforeExecute(thread)`, `afterExecute(thread, completion)`, `afterHandle(thread, completion, value?)` (note: hooks no longer receive an emitter; the parameter was dropped in v3 Phase 2).
 
-Tool authorization is two-phase: `Tool.authorize()` runs before the call; if it returns false, an `tools_auth` event is emitted and execution suspends. The caller invokes `agent.confirmFunctions(...)` to resume (optionally calling `authorizeAlways` to remember the decision).
+Tool authorization is two-phase: `Tool.authorize()` runs before the call; if it returns false, a `{type:'tools_auth', id, functions}` event is yielded and the generator suspends on an internal Promise stored in `this._pendingAuth.get(id)`. The consumer resumes by calling `agent.confirmFunctions(id, decision)` where `decision ∈ {'approve', 'approve_always', 'reject'}` (`approve_always` calls `tool.authorizeAlways()` to remember the decision). This `confirmFunctions` bridge is temporary; Phase 4 will replace it with a control message on the input channel.
+
+Within a single LLM turn, tools are executed **sequentially** (in `functions_to_call` order), so event ordering is deterministic. The previous parallel `Promise.all` invocation was dropped in Phase 2 to keep the event stream coherent.
 
 ### Models (`Models/*.js`, base in `Model.js`)
 
 Every provider extends `Model` and implements:
 - `getModels()` — returns `Map<label, definition>` where definition flags capabilities: `tools`, `structured_output`, `audio`, `image_generation`, `tokens` (context window), `tiktoken` (encoding name).
-- `generate(model, thread, functions, options)` — **async generator** (Phase 1 of v3 refactor). Yields streaming deltas during generation and `return`s the final assembled `Message[]`. Delta union: `{type: 'text_delta', content}`, `{type: 'reasoning_delta', content}`, `{type: 'tool_call', content: {id?, name, arguments}}` (emitted complete), `{type: 'image', content, meta}`. The agent currently drains the generator in `Agent.generateCompletion()` and uses only the return value; Phase 2 will forward deltas to consumers. Tool-call deltas from chat-completions-style APIs (OpenAI legacy, Groq) are accumulated per `index` and yielded once at end-of-stream.
+- `generate(model, thread, functions, options)` — **async generator** (Phase 1 of v3 refactor). Yields streaming deltas during generation and `return`s the final assembled `Message[]`. Delta union: `{type: 'text_delta', content}`, `{type: 'reasoning_delta', content}`, `{type: 'tool_call', content: {id?, name, arguments}}` (emitted complete), `{type: 'image', content, meta}`. `Agent.generateCompletion()` (Phase 2) is itself an async generator: it forwards `text_delta` to consumers as `{type:'chunk', content}` events and returns the assembled `Message[]`. Other delta types are not forwarded yet and only contribute to the final assembly. Tool-call deltas from chat-completions-style APIs (OpenAI legacy, Groq) are accumulated per `index` and yielded once at end-of-stream.
 - Optionally `countTokens(thread)` (used by `Summarizer`).
 
 A model definition's `tools: true` means the provider supports native function calling. When false, `Agent.parseFunctions()` falls back to parsing `\`\`\`\nCALL <name>\n<json>\n\`\`\`` blocks out of plain text — the prompt for this is built by `Model.promptFromFunctions()` (in Italian; do not translate without verifying the existing parser still matches).
@@ -53,11 +55,23 @@ Two distinct concepts share the word "context":
 1. **`Context` / `Contexts/*`** — static reference material attached to an agent via `agent.addContext(text_or_context, {type: 'always' | 'on_request'})`. `always` contexts are inlined into the system message at thread init; `on_request` contexts are advertised by title/description and fetched lazily through the auto-injected `GetContextTool`. Mixing both is supported.
 2. **`ContextHandler`** — pre-execute hook (set as `options.memory_handler` on the agent) that can transform the thread before each LLM call. `Summarizer` extends this: when token count crosses `threshold * model.tokens`, it summarizes earlier messages down to `summary_length * model.tokens`, preserving the system prompt.
 
-### Event flow (`BufferedEventEmitter.js`)
+### Event flow (async generator)
 
-`Agent.execute()` emits events synchronously, but a `chat` agent returns the emitter to the caller who attaches listeners *after* events have already fired. `BufferedEventEmitter` buffers any emit with no listeners and flushes the buffer when `on()` is later called for that event. Don't replace it with a stock `EventEmitter` — the streaming UX depends on this behavior.
+`Agent.message()` / `trigger()` / `execute()` are async generators. The caller iterates with `for await (const ev of agent.message(...))`. There is no emitter, no listener-attach race, and no `BufferedEventEmitter` (removed in Phase 2). Each event is a discriminated union:
 
-Standard events: `start`, `output` (text/image chunks), `reasoning`, `tool`, `tool_response`, `tools_auth`, `error`, `end`.
+| Event | Payload | Notes |
+|---|---|---|
+| `{type:'start', thread}` | thread object | First yield |
+| `{type:'chunk', content}` | text delta string | Streamed during model generation |
+| `{type:'output', content}` | text/image content block | Yielded once the model finishes a message |
+| `{type:'reasoning', content}` | reasoning text | Yielded after assembly, per reasoning block |
+| `{type:'tool', id, name, arguments}` | flattened function call | Before invoking a tool |
+| `{type:'tool_response', name, success, response?, error?}` | tool result | After tool returns or throws |
+| `{type:'tools_auth', id, functions}` | uuid + pending function calls | When `tool.authorize()` returns false; resume with `agent.confirmFunctions(id, decision)` |
+| `{type:'result', value}` | parsed value | Utility agents only |
+| `{type:'end', thread}` | thread object | Always yielded, even on throw (yielded from a `finally`) |
+
+Errors throw out of the generator. There is no `error` event anymore.
 
 ## Conventions specific to this repo
 

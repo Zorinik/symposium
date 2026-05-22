@@ -150,6 +150,12 @@ export default class Symposium {
 
 		await agent.init();
 		const thread = await agent.getThread();
-		return agent.message(prompt, thread);
+
+		let value;
+		for await (const ev of agent.message(prompt, thread)) {
+			if (ev.type === 'result')
+				value = ev.value;
+		}
+		return value;
 	}
 }
