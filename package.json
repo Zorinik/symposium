@@ -10,11 +10,11 @@
     "test": "node --test \"test/**/*.test.js\""
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.79.0",
+    "@anthropic-ai/sdk": "^0.98.0",
     "groq-sdk": "^1.0.0",
     "ollama": "^0.6.0",
     "openai": "^6.0.0",
     "tiktoken": "^1.0.10",
-    "uuid": "^13.0.0"
+    "uuid": "^14.0.0"
   }
 }
