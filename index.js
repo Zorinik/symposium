@@ -13,6 +13,8 @@ import Context from "./Context.js";
 import File from "./Contexts/File.js";
 import Text from "./Contexts/Text.js";
 
+import {createInputChannel} from "./InputChannel.js";
+
 export {
 	Symposium,
 	Agent,
@@ -24,4 +26,5 @@ export {
 	Context,
 	File,
 	Text,
+	createInputChannel,
 };

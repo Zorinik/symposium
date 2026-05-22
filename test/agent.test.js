@@ -9,6 +9,7 @@ import Thread from '../Thread.js';
 import Tool from '../Tool.js';
 
 import {drain} from './helpers/mockSdk.js';
+import {createInputChannel} from '../InputChannel.js';
 
 // A FakeModel whose generate() is supplied per-instance, so each test can script its own behavior.
 class ScriptedModel extends Model {
@@ -287,4 +288,179 @@ test('confirmFunctions(id, "reject") drops the tool call and ends the run', asyn
 	const types = events.map(e => e.type);
 	assert.deepEqual(types, ['start', 'tools_auth', 'end']);
 	assert.equal(guarded.called, 0);
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Phase 3 — Streaming input
+// ────────────────────────────────────────────────────────────────────────────────
+
+test('streaming input — channel.send(string) + close() runs one turn like a plain string', async () => {
+	const label = 'fake-stream-basic';
+	await Symposium.loadModel(new ScriptedModel(label, [{
+		deltas: [{type: 'text_delta', content: 'Hi'}],
+		messages: [new Message('assistant', [{type: 'text', content: 'Hi'}])],
+	}]));
+
+	const agent = new Agent();
+	agent.default_model = label;
+	await agent.init();
+
+	const thread = await makeThread(agent, label);
+
+	const input = createInputChannel();
+	input.send('Hello');
+	input.close();
+
+	const events = [];
+	for await (const ev of agent.message(input, thread))
+		events.push(ev);
+
+	const types = events.map(e => e.type);
+	assert.deepEqual(types, ['start', 'chunk', 'output', 'end']);
+	assert.equal(events[1].content, 'Hi');
+});
+
+test('streaming input — second message after first turn triggers another turn', async () => {
+	const label = 'fake-stream-second-turn';
+	await Symposium.loadModel(new ScriptedModel(label, [
+		{
+			deltas: [{type: 'text_delta', content: 'First'}],
+			messages: [new Message('assistant', [{type: 'text', content: 'First'}])],
+		},
+		{
+			deltas: [{type: 'text_delta', content: 'Second'}],
+			messages: [new Message('assistant', [{type: 'text', content: 'Second'}])],
+		},
+	]));
+
+	const agent = new Agent();
+	agent.default_model = label;
+	await agent.init();
+
+	const thread = await makeThread(agent, label);
+
+	const input = createInputChannel();
+	input.send('first');
+
+	const events = [];
+	const gen = agent.message(input, thread);
+
+	let firstOutputSeen = false;
+	let step = await gen.next();
+	while (!step.done) {
+		events.push(step.value);
+		if (step.value.type === 'output' && !firstOutputSeen) {
+			firstOutputSeen = true;
+			queueMicrotask(() => {
+				input.send('second');
+				queueMicrotask(() => input.close());
+			});
+		}
+		step = await gen.next();
+	}
+
+	const types = events.map(e => e.type);
+	assert.deepEqual(types, ['start', 'chunk', 'output', 'chunk', 'output', 'end']);
+	const outputs = events.filter(e => e.type === 'output').map(e => e.content.content);
+	assert.deepEqual(outputs, ['First', 'Second']);
+});
+
+test('streaming input — submit terminates initial buildup, concatenates pieces', async () => {
+	const label = 'fake-stream-submit';
+	let observedUserContent = null;
+
+	class CapturingModel extends ScriptedModel {
+		async *generate(_model, thread, _functions, _options) {
+			for (let m of thread.messages) {
+				if (m.role === 'user')
+					observedUserContent = m.content;
+			}
+			const turn = this.script[this.calls++];
+			for (const delta of turn.deltas || [])
+				yield delta;
+			return turn.messages;
+		}
+	}
+
+	await Symposium.loadModel(new CapturingModel(label, [{
+		deltas: [{type: 'text_delta', content: 'Ok'}],
+		messages: [new Message('assistant', [{type: 'text', content: 'Ok'}])],
+	}]));
+
+	const agent = new Agent();
+	agent.default_model = label;
+	await agent.init();
+
+	const thread = await makeThread(agent, label);
+
+	const input = createInputChannel();
+	input.send('part one');
+	input.send('part two');
+	input.send({type: 'submit'});
+	input.close();
+
+	const events = [];
+	for await (const ev of agent.message(input, thread))
+		events.push(ev);
+
+	assert.ok(observedUserContent, 'user message should reach the model');
+	assert.equal(observedUserContent.length, 2);
+	assert.equal(observedUserContent[0].content, 'part one');
+	assert.equal(observedUserContent[1].content, 'part two');
+});
+
+test('streaming input — cancel ends the loop gracefully without starting another turn', async () => {
+	const label = 'fake-stream-cancel';
+	const model = new ScriptedModel(label, [
+		{
+			deltas: [{type: 'text_delta', content: 'A'}],
+			messages: [new Message('assistant', [{type: 'text', content: 'A'}])],
+		},
+	]);
+	await Symposium.loadModel(model);
+
+	const agent = new Agent();
+	agent.default_model = label;
+	await agent.init();
+
+	const thread = await makeThread(agent, label);
+
+	const input = createInputChannel();
+	input.send('go');
+
+	const events = [];
+	const gen = agent.message(input, thread);
+
+	let step = await gen.next();
+	while (!step.done) {
+		events.push(step.value);
+		if (step.value.type === 'output')
+			queueMicrotask(() => input.send({type: 'cancel'}));
+		step = await gen.next();
+	}
+
+	const types = events.map(e => e.type);
+	assert.deepEqual(types, ['start', 'chunk', 'output', 'end']);
+	assert.equal(model.calls, 1);
+});
+
+test('plain ContentBlock[] input continues to work', async () => {
+	const label = 'fake-array-input';
+	await Symposium.loadModel(new ScriptedModel(label, [{
+		deltas: [{type: 'text_delta', content: 'X'}],
+		messages: [new Message('assistant', [{type: 'text', content: 'X'}])],
+	}]));
+
+	const agent = new Agent();
+	agent.default_model = label;
+	await agent.init();
+
+	const thread = await makeThread(agent, label);
+
+	const events = [];
+	for await (const ev of agent.message([{type: 'text', content: 'hi'}], thread))
+		events.push(ev);
+
+	const types = events.map(e => e.type);
+	assert.deepEqual(types, ['start', 'chunk', 'output', 'end']);
 });

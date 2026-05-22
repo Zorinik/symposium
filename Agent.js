@@ -7,6 +7,56 @@ import Context from "./Context.js";
 import Text from "./Contexts/Text.js";
 import GetContextTool from "./GetContextTool.js";
 
+const CONTROL_TYPES = new Set(['submit', 'cancel', 'auth']);
+
+function isControlMessage(item) {
+	if (!item || typeof item !== 'object' || Array.isArray(item))
+		return false;
+	if (typeof item.type !== 'string')
+		return false;
+	return CONTROL_TYPES.has(item.type);
+}
+
+function isAsyncIterableInput(content) {
+	return content !== null
+		&& typeof content === 'object'
+		&& !Array.isArray(content)
+		&& typeof content[Symbol.asyncIterator] === 'function';
+}
+
+function normalizeStreamBuffer(items) {
+	const blocks = [];
+	for (const item of items) {
+		if (typeof item === 'string')
+			blocks.push({type: 'text', content: item});
+		else if (Array.isArray(item))
+			blocks.push(...item);
+		else if (item && typeof item === 'object')
+			blocks.push(item);
+	}
+	return blocks;
+}
+
+function makeNotifier() {
+	let resolve;
+	let promise = new Promise(r => { resolve = r; });
+	return {
+		wait() { return promise; },
+		signal() {
+			const r = resolve;
+			promise = new Promise(res => { resolve = res; });
+			r();
+		},
+	};
+}
+
+async function isPromiseReady(p) {
+	return Promise.race([
+		p.then(() => true, () => true),
+		new Promise(r => setImmediate(() => r(false))),
+	]);
+}
+
 export default class Agent {
 	name = 'Agent';
 	description = null;
@@ -30,6 +80,7 @@ export default class Agent {
 
 		this.threads = new Map();
 		this._pendingAuth = new Map();
+		this._streamingInputs = new Map();
 	}
 
 	async init() {
@@ -173,21 +224,192 @@ ${context_string}
 		if (typeof thread !== 'object')
 			thread = await this.getThread(thread);
 
-		const model = Symposium.getModel(thread.state.model);
-		if (!model.audio && typeof content !== 'string') {
-			for (let c of content) {
-				if (c.type === 'audio' && !c.content?.transcription) {
-					const words = await this.getPromptWordsForTranscription(thread);
-					const prompt = words.length ? 'Possibili parole usate: ' + words.join(', ') : null;
-					c.content.transcription = await Symposium.transcribe(c.content, prompt);
+		if (!isAsyncIterableInput(content)) {
+			const model = Symposium.getModel(thread.state.model);
+			if (!model.audio && typeof content !== 'string') {
+				for (let c of content) {
+					if (c.type === 'audio' && !c.content?.transcription) {
+						const words = await this.getPromptWordsForTranscription(thread);
+						const prompt = words.length ? 'Possibili parole usate: ' + words.join(', ') : null;
+						c.content.transcription = await Symposium.transcribe(c.content, prompt);
+					}
 				}
 			}
+
+			await this.log('user_message', content);
+			thread.addMessage('user', content);
+
+			yield* this.trigger(thread);
+			return;
 		}
 
+		const iterator = content[Symbol.asyncIterator]();
+		const notifier = makeNotifier();
+		const pendingMessages = [];
+		const controlFlags = {cancelled: false, readerFinished: false};
+		const inputState = {streaming: true, pendingMessages, controlFlags, notifier};
+		this._streamingInputs.set(thread.unique, inputState);
+
+		let readerPromise = Promise.resolve();
+		let readerStarted = false;
+
+		try {
+			const {buffer, iteratorClosed, leftoverNext} = await this._drainInitialInput(iterator, controlFlags);
+
+			if (controlFlags.cancelled) {
+				yield {type: 'start', thread};
+				yield {type: 'end', thread};
+				return;
+			}
+
+			if (buffer.length === 0 && iteratorClosed) {
+				yield {type: 'start', thread};
+				yield {type: 'end', thread};
+				return;
+			}
+
+			const initialContent = normalizeStreamBuffer(buffer);
+			await this._transcribeAudioIfNeeded(thread, initialContent);
+
+			await this.log('user_message', initialContent);
+			thread.addMessage('user', initialContent);
+
+			if (!iteratorClosed) {
+				readerStarted = true;
+				readerPromise = this._runBackgroundReader(iterator, leftoverNext, inputState);
+			} else {
+				controlFlags.readerFinished = true;
+			}
+
+			yield* this.trigger(thread);
+		} finally {
+			this._streamingInputs.delete(thread.unique);
+			if (readerStarted) {
+				try {
+					if (typeof iterator.return === 'function')
+						await iterator.return();
+				} catch (e) {}
+				try {
+					await readerPromise;
+				} catch (e) {}
+			}
+		}
+	}
+
+	async _transcribeAudioIfNeeded(thread, blocks) {
+		const model = Symposium.getModel(thread.state.model);
+		if (model.audio)
+			return;
+		for (let c of blocks) {
+			if (c?.type === 'audio' && !c.content?.transcription) {
+				const words = await this.getPromptWordsForTranscription(thread);
+				const prompt = words.length ? 'Possibili parole usate: ' + words.join(', ') : null;
+				c.content.transcription = await Symposium.transcribe(c.content, prompt);
+			}
+		}
+	}
+
+	async _drainInitialInput(iterator, controlFlags) {
+		const buffer = [];
+		let iteratorClosed = false;
+		let nextPromise = iterator.next();
+
+		while (true) {
+			if (buffer.length > 0) {
+				const ready = await isPromiseReady(nextPromise);
+				if (!ready)
+					break;
+			}
+
+			let result;
+			try {
+				result = await nextPromise;
+			} catch (e) {
+				iteratorClosed = true;
+				nextPromise = null;
+				throw e;
+			}
+
+			if (result.done) {
+				iteratorClosed = true;
+				nextPromise = null;
+				break;
+			}
+
+			const item = result.value;
+			if (isControlMessage(item)) {
+				if (item.type === 'submit') {
+					nextPromise = iterator.next();
+					break;
+				}
+				if (item.type === 'cancel') {
+					controlFlags.cancelled = true;
+					iteratorClosed = true;
+					nextPromise = null;
+					break;
+				}
+				nextPromise = iterator.next();
+				continue;
+			}
+
+			buffer.push(item);
+			nextPromise = iterator.next();
+		}
+
+		return {buffer, iteratorClosed, leftoverNext: nextPromise};
+	}
+
+	async _runBackgroundReader(iterator, leftoverNext, inputState) {
+		const {pendingMessages, controlFlags, notifier} = inputState;
+		try {
+			let pending = leftoverNext;
+			while (true) {
+				const result = await (pending || iterator.next());
+				pending = null;
+				if (result.done)
+					return;
+				const item = result.value;
+				if (isControlMessage(item)) {
+					if (item.type === 'cancel') {
+						controlFlags.cancelled = true;
+						notifier.signal();
+						return;
+					}
+					continue;
+				}
+				pendingMessages.push(item);
+				notifier.signal();
+			}
+		} finally {
+			controlFlags.readerFinished = true;
+			notifier.signal();
+		}
+	}
+
+	async _drainPendingMessages(thread) {
+		const state = this._streamingInputs.get(thread.unique);
+		if (!state || !state.pendingMessages.length)
+			return;
+		const items = state.pendingMessages.splice(0);
+		const content = normalizeStreamBuffer(items);
+		await this._transcribeAudioIfNeeded(thread, content);
 		await this.log('user_message', content);
 		thread.addMessage('user', content);
+	}
 
-		yield* this.trigger(thread);
+	async _awaitNextStreamingInput(thread) {
+		const state = this._streamingInputs.get(thread.unique);
+		if (!state)
+			return false;
+		while (true) {
+			if (state.controlFlags.cancelled)
+				return false;
+			if (state.pendingMessages.length)
+				return true;
+			if (state.controlFlags.readerFinished)
+				return false;
+			await state.notifier.wait();
+		}
 	}
 
 	async *trigger(thread = null) {
@@ -244,8 +466,17 @@ ${context_string}
 			}
 		}
 
+		const streamingState = this._streamingInputs.get(thread.unique);
+		const streaming = !!streamingState;
+
 		let counter = 0;
 		while (true) {
+			if (streaming) {
+				await this._drainPendingMessages(thread);
+				if (streamingState.controlFlags.cancelled)
+					return;
+			}
+
 			const completion = yield* this.generateCompletion(thread, completion_options);
 
 			try {
@@ -271,6 +502,13 @@ ${context_string}
 
 					case 'chat':
 						if (verdict?.type === 'continue') {
+							counter = 0;
+							continue;
+						}
+						if (streaming) {
+							const more = await this._awaitNextStreamingInput(thread);
+							if (!more)
+								return;
 							counter = 0;
 							continue;
 						}
