@@ -576,6 +576,7 @@ ${context_string}
 							output_yielded = false;
 							continue;
 						}
+						yield {type: 'turn_end', thread};
 						if (streaming) {
 							const more = await this._awaitNextStreamingInput(thread);
 							if (!more)
