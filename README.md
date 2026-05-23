@@ -1,15 +1,21 @@
 # Symposium
 
-Symposium is a powerful and flexible Node.js framework for building Large Language Model (LLM)-powered agents. It provides a structured, extensible architecture for creating complex AI systems with distinct behaviors, tools, and memory.
+Symposium is a Node.js framework for building Large Language Model (LLM)-powered agents. It provides a structured, extensible architecture for creating complex AI systems with distinct behaviors, tools, and memory.
+
+> **3.0 is a breaking release.** The old `EventEmitter` API is gone, replaced by async generators and streaming input channels. See [MIGRATION.md](./MIGRATION.md) for upgrade instructions.
 
 ## Features
 
--   **Agent-Based Architecture**: Create multiple, specialized agents that can be extended with unique behaviors.
--   **Model Agnostic**: Easily integrate with various LLM providers (OpenAI, Anthropic, Groq, etc.). A list of supported models is available in the `models` folder.
--   **Tool Integration**: Extend agents' capabilities by giving them tools to interact with external systems.
--   **Stateful Conversations**: Manages conversational state and history through Threads.
--   **Persistent Memory**: Pluggable storage adapters allow for long-term memory.
--   **Real-time Sessions**: Built-in support for real-time voice conversations.
+-	**Agent-Based Architecture**: Create multiple, specialized agents that can be extended with unique behaviors.
+-	**Model Agnostic**: Easily integrate with various LLM providers (OpenAI, Anthropic, Groq, DeepSeek, Grok, Ollama). A list of supported models is available in the `Models` folder.
+-	**Real streaming**: Model adapters use the underlying providers' streaming APIs and forward token deltas to consumers as they arrive.
+-	**Async generator API**: `agent.message(...)` returns an async iterable — consume it with `for await`.
+-	**Streaming input**: Push user messages, tool-authorization decisions, and control signals into a running agent via an input channel.
+-	**Tool integration**: Extend agents' capabilities with tools that the LLM can call.
+-	**Stateful conversations**: Manage conversational state and history through Threads.
+-	**Persistent memory**: Pluggable storage adapters allow for long-term memory.
+-	**Structured output**: Set `response_schema` on any agent (chat or utility) to constrain the final answer to a JSON schema.
+-	**Real-time sessions**: Built-in support for real-time voice conversations.
 
 ## Installation
 
@@ -23,80 +29,67 @@ npm install symposium
 
 Symposium uses environment variables to configure access to various services. You can set these in a `.env` file at the root of your project.
 
--   `OPENAI_API_KEY`: Required for using OpenAI models and for Real-time Voice Sessions.
--   `ANTHROPIC_API_KEY`: Required for using Anthropic models.
--   `GROQ_API_KEY`: Required for using Groq models.
--   `DEEPSEEK_API_KEY`: Required for using DeepSeek models.
--   `TRANSCRIPTION_MODEL`: (Optional) The name of the model to use for audio transcription (currently, only `gpt-4o-transcribe` is supported).
+-	`OPENAI_API_KEY`: Required for OpenAI models and real-time voice sessions.
+-	`ANTHROPIC_API_KEY`: Required for Anthropic models.
+-	`GROQ_API_KEY`: Required for Groq models.
+-	`DEEPSEEK_API_KEY`: Required for DeepSeek models.
+-	`TRANSCRIPTION_MODEL`, `EMBEDDING_MODEL`: Model labels routed to STT / embedding providers.
 
 ## Core Concepts
 
-The framework is built around a few core components:
-
--   **`Symposium`**: A static class that acts as the central hub. It's responsible for loading models and initializing the storage adapter.
--   **`Agent`**: The heart of the framework. An `Agent` is an autonomous entity with a specific goal. You extend this class to define your agent's unique prompt, behavior, and tools.
--   **`Thread`**: Represents a single conversation with an agent. It maintains the message history and the agent's state for that conversation. Each thread has a unique ID.
--   **`Tool`**: A base class for creating tools that an `Agent` can use. Tools expose functions that the LLM can call to interact with external APIs or data.
--   **`Message`**: A wrapper for messages within a `Thread`, containing the role (`user`, `assistant`, `system`, `tool`), content, and other metadata.
--   **`ContextHandler`**: A class for managing an agent's long contexts. It can be extended to create custom memory strategies.
--   **`Summarizer`**: A utility agent for summarizing text or conversations.
--   **`Logger`**: A simple logging utility that can be passed to an agent to log its activity.
+-	**`Symposium`**: Static class that acts as the central hub. Responsible for loading models and initializing the storage adapter.
+-	**`Agent`**: The heart of the framework. Extend this class to define an agent's prompt, behavior, and tools.
+-	**`Thread`**: A single conversation with an agent. Maintains message history and per-conversation state.
+-	**`Tool`**: Base class for tools that an `Agent` can call.
+-	**`Message`**: A typed message inside a `Thread`.
+-	**`ContextHandler`** / **`Summarizer`**: Pre-execute hooks for managing long-context strategies.
+-	**`createInputChannel`**: Helper that creates an `AsyncIterable` with `send(item)` / `close()` for streaming input into an agent.
 
 ## Getting Started
 
-Here's a simple example of how to create a basic chat agent.
-
 ### 1. Initialize Symposium
 
-First, you need to initialize `Symposium`. This will load all the available models. You can also provide a storage adapter for persistence.
-
 ```javascript
-// index.js
 import { Symposium } from 'symposium';
 
-async function main() {
-	await Symposium.init(); // You can pass a storage adapter here
-	// ... your agent code
-}
-
-main();
+await Symposium.init(); // optional: pass a storage adapter
 ```
 
-### 2. One shot prompts
+### 2. One-shot prompts
 
-You can also use the static `Symposium.prompt()` method for one-off prompts without creating an agent.
+`Symposium.prompt(system, prompt, options)` is a shortcut that spins up a bare utility agent and resolves directly to the final value.
 
 ```javascript
 import { Symposium } from 'symposium';
 await Symposium.init();
 
-const response = await Symposium.prompt('Translate the text from English to French.', 'Hello, how are you?');
-console.log(response); // "Bonjour, comment ça va?"
+const reply = await Symposium.prompt(
+	'Translate from English to French.',
+	'Hello, how are you?',
+);
+console.log(reply); // "Bonjour, comment ça va ?"
 
-const structured_response = await Symposium.prompt('Extract name and emails from the following email', email_text, {
-	response: {
-		type: 'json',
-        function: {
-            name: 'extract_data',
-            parameters: {
-                type: 'array',
-                items: {
-	                type: 'object',
-	                properties: {
-		                name: {type: 'string'},
-		                email: {type: 'string'},
-	                },
-	                required: ['name', 'email'],
-                },
-            },
-        },
-    },
-});
+// With structured output:
+const data = await Symposium.prompt(
+	'Extract name and emails from the following text',
+	email_text,
+	{
+		response_schema: {
+			type: 'array',
+			items: {
+				type: 'object',
+				properties: {
+					name: { type: 'string' },
+					email: { type: 'string' },
+				},
+				required: ['name', 'email'],
+			},
+		},
+	},
+);
 ```
 
 ### 3. Create your Agent
-
-For more structured and/or reusable tasks, create a new class that extends `Agent`. At a minimum, you'll want to define a name and a system prompt.
 
 ```javascript
 // MyChatAgent.js
@@ -114,70 +107,70 @@ export default class MyChatAgent extends Agent {
 
 ### 4. Start a Conversation
 
-Now you can instantiate your agent and start a conversation.
+`agent.message()` returns an async generator. Consume it with `for await`.
 
 ```javascript
-// index.js
 import { Symposium } from 'symposium';
 import MyChatAgent from './MyChatAgent.js';
 
-async function main() {
-	await Symposium.init();
+await Symposium.init();
 
-	const agent = new MyChatAgent();
-	await agent.init();
+const agent = new MyChatAgent();
+await agent.init();
 
-	const emitter = await agent.message('Hello, who are you?');
+for await (const ev of agent.message('Hello, who are you?')) {
+	switch (ev.type) {
+		case 'chunk':
+			process.stdout.write(ev.content); // streamed text delta
+			break;
 
-	emitter.on('output', message => {
-		switch (message.type) {
-            case 'text':
-	            process.stdout.write(message.content);
-				break;
+		case 'output':
+			// Final assembled content block for this assistant turn.
+			// ev.content is a typed block ({type:'text'|'image', ...}).
+			break;
 
-            case 'image':
-                // Process image
-                break;
-        }
-	});
+		case 'reasoning':
+			// Reasoning text from models that emit it (o-series, Claude thinking, etc.).
+			break;
 
-	emitter.on('error', error => {
-		console.error(`\nAn error occurred: ${error.message}`);
-	});
+		case 'tool':
+			console.log(`\n> Using tool: ${ev.name}(${JSON.stringify(ev.arguments)})`);
+			break;
 
-	emitter.on('tool', tool => {
-		console.log(`\n> Using tool: ${tool.name} with arguments ${JSON.stringify(tool.arguments)}\n`);
-	});
-
-	emitter.on('tool_response', (tool_response) => {
-		if (tool_response.success)
-			console.log(`\n> Tool ${tool_response.name} completed successfully with response: ${JSON.stringify(tool_response.response)}\n`);
-        else
-            console.log(`\n> Tool ${tool_response.name} failed with error: ${tool_response.error}\n`);
-	});
+		case 'tool_response':
+			if (ev.success)
+				console.log(`> ${ev.name} OK: ${JSON.stringify(ev.response)}`);
+			else
+				console.log(`> ${ev.name} FAILED: ${ev.error}`);
+			break;
+	}
 }
-
-main();
 ```
 
-When you run this, the agent will respond to your message, and the response will be streamed to the console. The `message` method returns an `EventEmitter` that emits several events:
+#### Event reference
 
--   `start`: Emitted when the agent begins processing the message. The `thread` object is passed as an argument.
--   `output`: Emitted for each chunk of text in the response stream.
--   `reasoning`: Emitted when the agent generates reasoning steps (if applicable).
--   `tool`: Emitted when the agent decides to use a tool. The tool name and arguments are provided.
--   `tool_response`: Emitted when a tool call completes, with the response or error
--   `error`: Emitted if an error occurs during processing.
+All events yielded from the generator:
+
+| Event | Payload | Notes |
+|---|---|---|
+| `start` | `{thread}` | First yield. |
+| `chunk` | `{content}` | Streamed text delta — concatenate to render incrementally. |
+| `output` | `{content}` | Final assembled content block (`text` / `image`) for one assistant message. |
+| `reasoning` | `{content}` | Reasoning text. |
+| `tool` | `{id, name, arguments}` | Emitted before invoking a tool. |
+| `tool_response` | `{name, success, response?, error?}` | Emitted after the tool returns or throws. |
+| `tools_auth` | `{id, functions}` | Yielded when authorization is required — see below. |
+| `retry` | `{attempt, reason}` | Only when an error occurs *after* at least one chunk has already streamed for the current turn. |
+| `result` | `{value}` | Only when `response_schema` is set — parsed structured answer. |
+| `end` | `{thread}` | Always yielded last, even on throw. |
+
+Errors throw out of the generator. There is no `error` event.
 
 ## Advanced Usage
 
 ### Using Tools
 
-Tools allow your agent to interact with the outside world. To create a tool, extend the `Tool` class and define one or more functions.
-
-#### 1. Create a Tool
-
-Here's an example of a tool that can get the current weather.
+Tools allow your agent to interact with the outside world. Extend `Tool` and expose one or more functions.
 
 ```javascript
 // WeatherTool.js
@@ -187,145 +180,121 @@ export default class WeatherTool extends Tool {
 	name = 'WeatherTool';
 
 	async getFunctions() {
-		return [
-			{
-				name: 'get_weather',
-				description: 'Get the current weather for a specific city',
-				parameters: {
-					type: 'object',
-					properties: {
-						city: {
-							type: 'string',
-							description: 'The city name',
-						},
-					},
-					required: ['city'],
+		return [{
+			name: 'get_weather',
+			description: 'Get the current weather for a specific city',
+			parameters: {
+				type: 'object',
+				properties: {
+					city: { type: 'string', description: 'The city name' },
 				},
+				required: ['city'],
 			},
-		];
+		}];
 	}
 
 	async callFunction(thread, name, payload) {
-		if (name === 'get_weather') {
-			const city = payload.city;
-			// In a real app, you would call a weather API here
+		if (name === 'get_weather')
 			return { temperature: '25°C', condition: 'sunny' };
-		}
 	}
 }
 ```
 
-#### 2. Add the Tool to your Agent
-
-Now, add the tool to your agent instance.
+Add the tool to your agent:
 
 ```javascript
-// index.js
-import MyChatAgent from './MyChatAgent.js';
-import WeatherTool from './WeatherTool.js';
-
-// ... inside main()
 const agent = new MyChatAgent();
 await agent.addTool(new WeatherTool());
 await agent.init();
 
-const emitter = await agent.message("What's the weather like in Paris?");
-// ...
+for await (const ev of agent.message("What's the weather in Paris?")) {
+	// ...
+}
 ```
 
-The agent's underlying LLM will now be able to see the `get_weather` function and will call it when appropriate, passing the result back into the conversation.
+Tools within a single LLM turn are executed sequentially, in the order the model requested them, so the event stream is fully deterministic.
 
-### Real-time Voice and Transcription
+### Tool Authorization
 
-Symposium has built-in support for audio transcription and real-time voice sessions, currently powered by OpenAI.
-
-#### Audio Transcription
-
-You can send audio content directly in a message. If the model doesn't support audio input, Symposium will automatically transcribe it to text.
+To require explicit approval for a tool, override `Tool.authorize()`. When it returns `false`, the agent yields a `tools_auth` event and suspends. The consumer resumes the run by sending an `auth` control message through the input channel.
 
 ```javascript
-// Transcribing an audio file from a URL
-const emitter = await agent.message([
-    {
-        type: 'audio',
-        content: {
-            type: 'url',
-            data: 'http://example.com/audio.mp3'
-        }
-    }
-]);
+import { Tool } from 'symposium';
+
+class DangerousTool extends Tool {
+	async authorize(thread, name, payload) {
+		return false; // always ask
+	}
+	async authorizeAlways(thread, name, payload) {
+		// Persist an "always approve" decision somewhere (DB, file, etc.).
+	}
+	// ... getFunctions / callFunction
+}
 ```
 
-You can also use the static `Symposium.transcribe()` method for standalone transcription.
-
-#### Real-time Voice Sessions
-
-For interactive voice conversations, you can create a real-time session. This is useful for building voice bots.
-
 ```javascript
-// (inside an async function)
-const { response, thread } = await agent.createRealtimeSession();
-const sessionId = response.id;
-const clientSecret = response.client_secret.value;
+import { createInputChannel } from 'symposium';
 
-// You would then use this session ID and client secret on the client-side
-// to connect to the real-time session endpoint.
+const input = createInputChannel();
+input.send('Please run that risky operation');
+
+for await (const ev of agent.message(input)) {
+	if (ev.type === 'tools_auth') {
+		const decision = await askUser(ev.functions); // 'approve' | 'approve_always' | 'reject'
+		input.send({ type: 'auth', id: ev.id, decision });
+	}
+}
 ```
 
-### Switching Models
+`'approve_always'` calls `tool.authorizeAlways()` on each pending function so the decision is persisted. If the input channel closes while a `tools_auth` is pending, the decision is treated as `'reject'` and the run is cancelled. If you call `agent.message()` with a plain string (no channel), any auth request auto-rejects, since there is no way to deliver a decision.
 
-You can set a default model for an agent or change it on a per-thread basis.
+### Streaming Input
+
+`agent.message()` accepts three input shapes:
+
+1.	a plain `string`,
+2.	a `ContentBlock[]` (e.g. text + image),
+3.	an `AsyncIterable<string | ContentBlock | ContentBlock[] | ControlMessage>`.
+
+The first two behave traditionally — one user turn, one model loop, done. An async iterable enables **streaming input**: keep pushing messages into the agent at any time.
 
 ```javascript
-// Setting a default model for the agent
-class MyAgent extends Agent {
-    default_model = 'claude-3-5-sonnet';
-    //...
+import { createInputChannel } from 'symposium';
+
+const input = createInputChannel();
+input.send('Plan a trip to Rome');
+
+// Concurrently, from elsewhere:
+setTimeout(() => input.send('Actually, make it Florence instead'), 2000);
+
+for await (const ev of agent.message(input)) {
+	if (ev.type === 'chunk')
+		process.stdout.write(ev.content);
 }
 
-// Changing the model for a specific thread
-const thread = await agent.getThread('thread-id');
-await agent.setModel(thread, 'gpt-3.5-turbo');
+// When you're done, close the channel to end the run:
+input.close();
 ```
 
-The model label must be one of the models available in the `models` directory.
+Behavior with a channel:
 
-### Persistence
+-	The agent drains incoming items into the initial user message and starts the first model turn once content has arrived (or once a `{type:'submit'}` control message lands).
+-	New items pushed during a turn are queued and inserted as a new `user` message at the next inter-turn boundary (after the current tool batch finishes — there is no mid-turn cancellation).
+-	The run keeps going across multiple turns until the channel closes, or a `{type:'cancel'}` control message is sent.
 
-Symposium can persist thread state and messages if you provide a storage adapter. The adapter must implement three methods: `init()`, `get(key)`, and `set(key, value)`.
+Control messages accepted on the channel:
 
-```javascript
-// MySimpleFileStorage.js
-import fs from 'fs/promises';
-
-class MySimpleFileStorage {
-    async init() {
-        await fs.mkdir('./storage', { recursive: true });
-    }
-    async get(key) {
-        try {
-            const data = await fs.readFile(`./storage/${key}.json`, 'utf-8');
-            return JSON.parse(data);
-        } catch (e) {
-            return null;
-        }
-    }
-    async set(key, value) {
-        await fs.writeFile(`./storage/${key}.json`, JSON.stringify(value, null, 2));
-    }
-}
-
-// index.js
-await Symposium.init(new MySimpleFileStorage());
+```js
+{ type: 'auth',   id, decision: 'approve' | 'approve_always' | 'reject' }
+{ type: 'submit' }    // closes the initial user-message build-up
+{ type: 'cancel' }    // gracefully stops the agent loop after the in-flight turn
 ```
 
-With a storage adapter in place, conversations will be saved and loaded automatically based on the thread ID.
+### Structured Output
 
-### Utility Agents
+`response_schema` is independent of the agent type — set it on either a chat or utility agent to constrain the final answer.
 
-Besides `chat` agents, you can create `utility` agents. These are designed for specific, one-shot tasks like data extraction or classification, rather than open-ended conversation. `await agent.message(...)` resolves to the value directly — no generator to iterate.
-
-Set `response_schema` (a plain JSON schema) to enforce structured output. The agent uses the provider's structured-output mode when available, otherwise falls back to a forced function call. Without `response_schema`, a utility agent simply returns the assistant's text.
+**Utility agent** — `await agent.message(...)` resolves directly to the parsed value:
 
 ```javascript
 // TextExtractorAgent.js
@@ -348,16 +317,13 @@ export default class TextExtractorAgent extends Agent {
 	}
 }
 
-// Usage
 const extractor = new TextExtractorAgent();
 await extractor.init();
-const result = await extractor.message('My name is John Doe and my email is john.doe@example.com');
+const result = await extractor.message('My name is John Doe, john.doe@example.com');
 console.log(result); // { name: 'John Doe', email: 'john.doe@example.com' }
 ```
 
-### Structured output for chat agents
-
-`response_schema` is independent of the agent type — set it on a `chat` agent to constrain the final assistant message to your schema. The event stream behaves normally; a final `{type:'result', value}` event carries the parsed object before `end`.
+**Chat agent with structured final answer** — events stream normally; a final `{type:'result', value}` event carries the parsed object just before `end`:
 
 ```javascript
 const agent = new MyChatAgent();
@@ -374,37 +340,116 @@ for await (const ev of agent.message('Look up the weather and reply in JSON')) {
 }
 ```
 
+Internally, structured-output-capable OpenAI models use `response_format: json_schema`; otherwise the agent falls back to a forced function call and parses its arguments.
+
+### Real-time Voice and Transcription
+
+Symposium has built-in support for audio transcription and real-time voice sessions, currently powered by OpenAI.
+
+```javascript
+// Inline audio in a message — automatically transcribed if the model doesn't accept audio:
+for await (const ev of agent.message([
+	{
+		type: 'audio',
+		content: { type: 'url', data: 'http://example.com/audio.mp3' },
+	},
+])) {
+	// ...
+}
+
+// Standalone transcription:
+const text = await Symposium.transcribe(audio_buffer);
+
+// Real-time voice session:
+const { response, thread } = await agent.createRealtimeSession();
+const sessionId = response.id;
+const clientSecret = response.client_secret.value;
+```
+
+### Switching Models
+
+```javascript
+class MyAgent extends Agent {
+	default_model = 'claude-3-5-sonnet';
+	// ...
+}
+
+const thread = await agent.getThread('thread-id');
+await agent.setModel(thread, 'gpt-5');
+```
+
+### Persistence
+
+Provide a storage adapter implementing `init()`, `get(key)`, `set(key, value)`:
+
+```javascript
+import fs from 'fs/promises';
+
+class FileStorage {
+	async init() {
+		await fs.mkdir('./storage', { recursive: true });
+	}
+	async get(key) {
+		try {
+			return JSON.parse(await fs.readFile(`./storage/${key}.json`, 'utf-8'));
+		} catch {
+			return null;
+		}
+	}
+	async set(key, value) {
+		await fs.writeFile(`./storage/${key}.json`, JSON.stringify(value, null, 2));
+	}
+}
+
+await Symposium.init(new FileStorage());
+```
+
+### Retries
+
+The agent retries each turn up to `max_retries` (default 5) times on transport / model errors. The retry strategy is hybrid:
+
+-	If no `chunk` has been streamed yet for the current turn, the retry is **silent** (no consumer-visible event).
+-	If at least one `chunk` has already been streamed, the agent yields `{type:'retry', attempt, reason}` before retrying so consumers can react (e.g. show a spinner, clear partial output).
+
+Errors during *tool* execution are not retried — they're surfaced as `{type:'tool_response', success:false, error}`.
+
 ## API Reference
 
-This is a high-level overview. For details, please refer to the source code.
+High-level overview — see source for full details.
 
 ### `Agent`
 
--   `constructor(options)`: Creates a new agent. Options can include a `memory_handler` or `logger`.
--   `init()`: Initializes the agent. Must be called before use.
--   `addTool(tool)`: Adds a `Tool` instance to the agent.
--   `message(content, thread)`: Sends a message to the agent. Returns an EventEmitter.
--   `getThread(id)`: Retrieves a `Thread` instance by its ID.
--   `setModel(thread, modelLabel)`: Changes the LLM for a specific thread.
--   `createRealtimeSession(thread_id, options)`: Creates a real-time session for voice interaction.
+-	`constructor(options)` — Optional `memory_handler` and `logger`.
+-	`init()` — Must be called before use.
+-	`addTool(tool)` — Add a `Tool` instance.
+-	`message(content, thread)` — Send a message. Returns an async generator for chat agents; resolves to the parsed value (Promise) for utility agents.
+-	`getThread(id)` — Retrieve a `Thread` instance.
+-	`setModel(thread, modelLabel)` — Change the LLM for a thread.
+-	`createRealtimeSession(thread_id, options)` — Create a real-time voice session.
 
 ### `Thread`
 
--   `constructor(id, agent)`: Creates a new thread.
--   `addMessage(role, content, name, tags)`: Adds a message to the thread.
--   `setState(state, save)`: Updates the thread's state object.
--   `loadState()` / `storeState()`: Manages persistence (used internally).
+-	`constructor(id, agent)`
+-	`addMessage(role, content, name, tags)`
+-	`setState(state, save)`
+-	`loadState()` / `storeState()`
 
 ### `Tool`
 
--   `getFunctions()`: **Abstract**. Must return an array of function definitions that the LLM can call.
--   `callFunction(thread, name, payload)`: **Abstract**. Called when the LLM decides to use one of the tool's functions.
+-	`getFunctions()` — Abstract. Return an array of function definitions for the LLM.
+-	`callFunction(thread, name, payload)` — Abstract. Called when the LLM invokes one of the tool's functions.
+-	`authorize(thread, name, payload)` — Optional. Return `false` to require explicit consumer approval (`tools_auth` event).
+-	`authorizeAlways(thread, name, payload)` — Optional. Called when the consumer responds with `'approve_always'`.
+
+### `createInputChannel()`
+
+Returns `{ send(item), close(), [Symbol.asyncIterator]() }`. Push strings, content blocks, or control messages from anywhere; iterate the channel from `agent.message()`.
 
 ### Other Classes
 
--   **`ContextHandler`**: Provides a base for managing long-term context. Can be extended for custom memory strategies.
--   **`Summarizer`**: A utility agent for text summarization.
--   **`Logger`**: A simple logger for agent activity.
+-	**`ContextHandler`**: Base for managing long-term context.
+-	**`Summarizer`**: Utility agent that compresses old messages once a thread crosses a token threshold.
+-	**`Logger`**: Simple per-agent logger.
 
 ## License
 
