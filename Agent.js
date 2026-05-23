@@ -6,6 +6,8 @@ import Tool from "./Tool.js";
 import Context from "./Context.js";
 import Text from "./Contexts/Text.js";
 import GetContextTool from "./GetContextTool.js";
+import MCPServer from "./MCPServer.js";
+import MCPResource from "./Contexts/MCPResource.js";
 
 const CONTROL_TYPES = new Set(['submit', 'cancel', 'auth']);
 
@@ -142,6 +144,23 @@ export default class Agent {
 
 		const title = await context.getTitle();
 		this.context.push({title, context, options});
+	}
+
+	async addMCPServer(config) {
+		const server = new MCPServer(config);
+		await this.addTool(server);
+
+		if (config.resources) {
+			const resources = await server.listResources();
+			for (const res of resources) {
+				await this.addContext(new MCPResource(server, res), {
+					type: 'on_request',
+					description: res.description || '',
+				});
+			}
+		}
+
+		return server;
 	}
 
 	async initThread(thread) {

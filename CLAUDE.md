@@ -59,6 +59,10 @@ Two distinct concepts share the word "context":
 1. **`Context` / `Contexts/*`** — static reference material attached to an agent via `agent.addContext(text_or_context, {type: 'always' | 'on_request'})`. `always` contexts are inlined into the system message at thread init; `on_request` contexts are advertised by title/description and fetched lazily through the auto-injected `GetContextTool`. Mixing both is supported.
 2. **`ContextHandler`** — pre-execute hook (set as `options.memory_handler` on the agent) that can transform the thread before each LLM call. `Summarizer` extends this: when token count crosses `threshold * model.tokens`, it summarizes earlier messages down to `summary_length * model.tokens`, preserving the system prompt.
 
+### MCP servers (`MCPServer.js`, `Contexts/MCPResource.js`)
+
+`agent.addMCPServer(config)` is a third population path for tools + on_request contexts. It constructs an `MCPServer` (a multi-function `Tool` subclass wrapping `@modelcontextprotocol/sdk`'s `Client`), connects via the configured transport (`'stdio' | 'sse' | 'http'`), calls `listTools()`, and exposes each remote tool to the LLM under the **prefixed name** `<server>__<tool>` (always — no opt-out — so multiple MCP servers can coexist without function-name collisions). When `config.resources: true`, it also calls `listResources()` and registers each as an `on_request` `Context` (`MCPResource`), which lazily reads via `client.readResource(uri)` when the LLM asks for it through `get_context`. Returns the `MCPServer` instance; consumers running long-lived chat agents must call `await server.close()` to tear down the stdio child process or HTTP/SSE connection — there is no global `agent.dispose()`. MCP `prompts` and `sampling` are out of scope for v1. Connection is lazy: `MCPServer.init(agent)` (the normal Tool init hook) is what triggers `_connect()`, so the SDK is only imported when an MCP server is actually added.
+
 ### Event flow (async generator)
 
 `Agent.message()` / `trigger()` / `execute()` are async generators. The caller iterates with `for await (const ev of agent.message(...))`. There is no emitter, no listener-attach race, and no `BufferedEventEmitter` (removed in Phase 2). Each event is a discriminated union:
@@ -84,6 +88,7 @@ Errors throw out of the generator. There is no `error` event anymore.
 - Tabs for indentation; trailing commas in multi-line literals.
 - The fallback function-call prompt in `Model.promptFromFunctions()` and the realtime session preamble in `Agent.createRealtimeSession()` are written in Italian by design — keep them that way unless explicitly changing the language contract.
 - When adding a new provider, drop the file in `Models/` and `Symposium.init()` will pick it up automatically — there is no registry to update. The class must `extends Model` and `export default`.
+- MCP server lifecycle is owned by the consumer: `addMCPServer()` returns the `MCPServer` and callers must `await server.close()` when done (no global agent teardown in v1).
 - When adding new public exports, update `index.js` (the package entry point).
 - Bump `package.json` version on releases (see recent commits — `add support for gpt-5.4 model in OpenAIModel.js`, `bump version to 2.4.0`).
 

@@ -12,6 +12,9 @@ import Summarizer from "./Summarizer.js";
 import Context from "./Context.js";
 import File from "./Contexts/File.js";
 import Text from "./Contexts/Text.js";
+import MCPResource from "./Contexts/MCPResource.js";
+
+import MCPServer from "./MCPServer.js";
 
 import {createInputChannel} from "./InputChannel.js";
 
@@ -26,5 +29,7 @@ export {
 	Context,
 	File,
 	Text,
+	MCPServer,
+	MCPResource,
 	createInputChannel,
 };
