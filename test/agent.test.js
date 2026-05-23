@@ -35,8 +35,13 @@ class ScriptedModel extends Model {
 		const turn = this.script[this.calls++];
 		if (!turn)
 			throw new Error('No more scripted turns for model ' + this.label);
-		for (const delta of turn.deltas || [])
+		if (turn.throwBefore)
+			throw turn.throwBefore;
+		for (const delta of turn.deltas || []) {
 			yield delta;
+			if (delta._thenThrow)
+				throw delta._thenThrow;
+		}
 		return turn.messages;
 	}
 }
@@ -511,4 +516,92 @@ test('plain ContentBlock[] input continues to work', async () => {
 
 	const types = events.map(e => e.type);
 	assert.deepEqual(types, ['start', 'chunk', 'output', 'end']);
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Phase 5 — Hybrid retry: silent retry when no chunk has been yielded yet.
+// ────────────────────────────────────────────────────────────────────────────────
+test('retry is silent when error occurs before any chunk is yielded', async () => {
+	const label = 'fake-retry-silent';
+	const boom = Object.assign(new Error('boom'), {response: {status: 500, data: 'x'}});
+	await Symposium.loadModel(new ScriptedModel(label, [
+		{throwBefore: boom},
+		{
+			deltas: [{type: 'text_delta', content: 'ok'}],
+			messages: [new Message('assistant', [{type: 'text', content: 'ok'}])],
+		},
+	]));
+
+	const agent = new Agent();
+	agent.default_model = label;
+	await agent.init();
+
+	const thread = await makeThread(agent, label);
+
+	const events = [];
+	for await (const ev of agent.message('hi', thread))
+		events.push(ev);
+
+	const types = events.map(e => e.type);
+	assert.deepEqual(types, ['start', 'chunk', 'output', 'end']);
+	assert.equal(events.find(e => e.type === 'retry'), undefined);
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Phase 5 — Hybrid retry: visible retry when at least one chunk has been yielded.
+// ────────────────────────────────────────────────────────────────────────────────
+test('retry event is yielded when error occurs after a chunk', async () => {
+	const label = 'fake-retry-visible';
+	await Symposium.loadModel(new ScriptedModel(label, [
+		{
+			deltas: [{type: 'text_delta', content: 'partial', _thenThrow: new Error('mid-stream blew up')}],
+			messages: [],
+		},
+		{
+			deltas: [{type: 'text_delta', content: 'done'}],
+			messages: [new Message('assistant', [{type: 'text', content: 'done'}])],
+		},
+	]));
+
+	const agent = new Agent();
+	agent.default_model = label;
+	await agent.init();
+
+	const thread = await makeThread(agent, label);
+
+	const events = [];
+	for await (const ev of agent.message('hi', thread))
+		events.push(ev);
+
+	const types = events.map(e => e.type);
+	assert.deepEqual(types, ['start', 'chunk', 'retry', 'chunk', 'output', 'end']);
+	const retryEv = events.find(e => e.type === 'retry');
+	assert.equal(retryEv.attempt, 1);
+	assert.equal(retryEv.reason, 'mid-stream blew up');
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Phase 5 — Hybrid retry: exhausted retries surface the error out of the generator.
+// ────────────────────────────────────────────────────────────────────────────────
+test('exhausted retries throw out of the generator', async () => {
+	const label = 'fake-retry-exhausted';
+	await Symposium.loadModel(new ScriptedModel(label, [
+		{throwBefore: new Error('fail-1')},
+		{throwBefore: new Error('fail-2')},
+		{throwBefore: new Error('fail-3')},
+	]));
+
+	const agent = new Agent();
+	agent.default_model = label;
+	agent.max_retries = 2;
+	await agent.init();
+
+	const thread = await makeThread(agent, label);
+
+	await assert.rejects(
+		(async () => {
+			for await (const _ev of agent.message('hi', thread)) { /* drain */ }
+		})(),
+		/fail-3/,
+	);
 });

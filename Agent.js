@@ -495,6 +495,7 @@ ${context_string}
 		const streaming = !!streamingState;
 
 		let counter = 0;
+		let output_yielded = false;
 		while (true) {
 			if (streaming) {
 				await this._drainPendingMessages(thread);
@@ -502,9 +503,21 @@ ${context_string}
 					return;
 			}
 
-			const completion = yield* this.generateCompletion(thread, completion_options);
-
 			try {
+				// Inline drain of generateCompletion so we can observe `chunk`
+				// events and flip output_yielded for the hybrid retry strategy.
+				const it = this.generateCompletion(thread, completion_options);
+				let step = await it.next();
+				let completion;
+				while (!step.done) {
+					const ev = step.value;
+					if (ev?.type === 'chunk')
+						output_yielded = true;
+					yield ev;
+					step = await it.next();
+				}
+				completion = step.value;
+
 				thread = await this.afterExecute(thread, completion);
 
 				for (let message of completion) {
@@ -528,6 +541,7 @@ ${context_string}
 					case 'chat':
 						if (verdict?.type === 'continue') {
 							counter = 0;
+							output_yielded = false;
 							continue;
 						}
 						if (streaming) {
@@ -535,6 +549,7 @@ ${context_string}
 							if (!more)
 								return;
 							counter = 0;
+							output_yielded = false;
 							continue;
 						}
 						return;
@@ -543,10 +558,15 @@ ${context_string}
 						throw new Error('Bad agent type');
 				}
 			} catch (e) {
-				console.error(e);
-
 				if (counter < this.max_retries) {
 					counter++;
+					const reason = e?.message || String(e);
+					if (output_yielded)
+						yield {type: 'retry', attempt: counter, reason};
+					// Preserve the legacy 1-second backoff for transport-level 5xx.
+					if (e?.response?.status >= 500)
+						await new Promise(resolve => setTimeout(resolve, 1000));
+					output_yielded = false;
 					continue;
 				}
 				throw e;
@@ -591,7 +611,7 @@ ${context_string}
 		return thread;
 	}
 
-	async *generateCompletion(thread, options = {}, retry_counter = 1) {
+	async *generateCompletion(thread, options = {}) {
 		const model = Symposium.getModel(thread.state.model);
 		const it = model.class.generate(model, thread, await this.getFunctions(), {
 			...options,
@@ -599,35 +619,24 @@ ${context_string}
 		});
 
 		let messages;
-		let yielded = false;
 		try {
 			let step = await it.next();
 			while (!step.done) {
 				const delta = step.value;
-				if (delta && delta.type === 'text_delta') {
+				if (delta && delta.type === 'text_delta')
 					yield {type: 'chunk', content: delta.content};
-					yielded = true;
-				}
 				step = await it.next();
 			}
 			messages = step.value;
 		} catch (error) {
-			// Retry transport-level errors only if we haven't yielded any chunk yet.
-			if (!yielded && error.response) {
-				console.error(error.response.status);
-				console.error(error.response.data);
-
-				if (error.response.status >= 500 && retry_counter <= this.max_retries) {
-					await new Promise(resolve => setTimeout(resolve, 1000));
-					return yield* this.generateCompletion(thread, options, retry_counter + 1);
-				}
-
-				throw new Error(error.response.status + ': ' + JSON.stringify(error.response.data));
+			// Normalize error shape; the outer execute loop owns retry policy.
+			if (error?.response) {
+				const normalized = new Error(error.response.status + ': ' + JSON.stringify(error.response.data));
+				normalized.response = error.response;
+				throw normalized;
 			}
-			if (!yielded && error.message)
+			if (error?.message)
 				throw new Error(error.message);
-			if (!yielded)
-				throw new Error('Errore interno');
 			throw error;
 		}
 
