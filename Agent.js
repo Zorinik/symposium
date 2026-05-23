@@ -831,7 +831,7 @@ ${context_string}
 
 		try {
 			const response = await entry.toolkit.callTool(thread, tool_call.name, tool_call.arguments);
-			yield {type: 'tool_response', name: entry.toolkit.name, success: true, response};
+			yield {type: 'tool_response', id: tool_call.id, name: tool_call.name, toolkit: entry.toolkit.name, success: true, response};
 
 			return {
 				type: 'response',
@@ -839,7 +839,7 @@ ${context_string}
 				tool_call,
 			};
 		} catch (error) {
-			yield {type: 'tool_response', name: entry.toolkit.name, success: false, error: error.message || error};
+			yield {type: 'tool_response', id: tool_call.id, name: tool_call.name, toolkit: entry.toolkit.name, success: false, error: error.message || error};
 
 			return {
 				type: 'response',

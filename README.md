@@ -158,10 +158,11 @@ All events yielded from the generator:
 | `output` | `{content}` | Final assembled content block (`text` / `image`) for one assistant message. |
 | `reasoning` | `{content}` | Reasoning text. |
 | `tool` | `{id, name, arguments}` | Emitted before invoking a tool. |
-| `tool_response` | `{name, success, response?, error?}` | Emitted after the tool returns or throws. |
+| `tool_response` | `{id, name, toolkit, success, response?, error?}` | Emitted after the tool returns or throws. `id` matches the `tool` event's id; `name` is the tool name; `toolkit` is the owning toolkit's name. |
 | `tools_auth` | `{id, tools}` | Yielded when authorization is required — see below. |
 | `retry` | `{attempt, reason}` | Only when an error occurs *after* at least one chunk has already streamed for the current turn. |
 | `result` | `{value}` | Only when `response_schema` is set — parsed structured answer. |
+| `turn_end` | `{thread}` | After each completed turn (LLM done with no more tool calls). Fires per-turn whether the run continues or ends — use it (not `end`) to detect turn boundaries inside a streaming run. |
 | `end` | `{thread}` | Always yielded last, even on throw. |
 
 Errors throw out of the generator. There is no `error` event.

@@ -74,7 +74,7 @@ Two distinct concepts share the word "context":
 | `{type:'output', content}` | text/image content block | Yielded once the model finishes a message |
 | `{type:'reasoning', content}` | reasoning text | Yielded after assembly, per reasoning block |
 | `{type:'tool', id, name, arguments}` | flattened tool call | Before invoking a tool |
-| `{type:'tool_response', name, success, response?, error?}` | tool result | After tool returns or throws |
+| `{type:'tool_response', id, name, toolkit, success, response?, error?}` | tool result | After tool returns or throws. `id` matches the `tool` event's id; `name` is the tool name (same as the `tool` event); `toolkit` is the owning toolkit's name. |
 | `{type:'tools_auth', id, tools}` | uuid + pending tool calls | When `tool.authorize()` returns false; resume by sending `{type:'auth', id, decision}` on the input channel |
 | `{type:'retry', attempt, reason}` | 1-indexed retry number + error message | Yielded only when an error occurs AFTER at least one `chunk` has been streamed for the current turn (hybrid retry, Phase 5). Errors before any output are retried silently. |
 | `{type:'result', value}` | parsed value | Utility agents only |
