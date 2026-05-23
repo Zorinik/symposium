@@ -53,6 +53,8 @@ export default class Symposium {
 	}
 
 	static getModel(name) {
+		if (!this.models.has(name))
+			throw new Error(`Model with name "${name}" not found`);
 		return this.models.get(name);
 	}
 
