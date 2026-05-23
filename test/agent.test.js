@@ -189,10 +189,10 @@ test('utility text agent yields start → result → end with the parsed value',
 });
 
 // ────────────────────────────────────────────────────────────────────────────────
-// Tool authorization: tool.authorize() returns false, generator suspends until
-// confirmFunctions() is called from outside.
+// Tool authorization: tool.authorize() returns false, generator suspends until an
+// {type:'auth'} control message arrives on the input channel.
 // ────────────────────────────────────────────────────────────────────────────────
-test('tools_auth suspends until confirmFunctions(id, "approve") resumes the run', async () => {
+test('tools_auth suspends until {type:"auth", decision:"approve"} resumes the run', async () => {
 	const label = 'fake-chat-auth';
 	await Symposium.loadModel(new ScriptedModel(label, [
 		{
@@ -223,18 +223,16 @@ test('tools_auth suspends until confirmFunctions(id, "approve") resumes the run'
 
 	const thread = await makeThread(agent, label);
 
-	const events = [];
-	const gen = agent.message('do the thing', thread);
+	const input = createInputChannel();
+	input.send('do the thing');
 
-	// Iterate until we see tools_auth, then resolve it from outside.
-	let result = await gen.next();
-	while (!result.done) {
-		events.push(result.value);
-		if (result.value.type === 'tools_auth') {
-			// Schedule the approval on the next microtask so the generator is suspended on the pending promise.
-			queueMicrotask(() => agent.confirmFunctions(result.value.id, 'approve'));
-		}
-		result = await gen.next();
+	const events = [];
+	for await (const ev of agent.message(input, thread)) {
+		events.push(ev);
+		if (ev.type === 'tools_auth')
+			input.send({type: 'auth', id: ev.id, decision: 'approve'});
+		if (ev.type === 'output')
+			input.close();
 	}
 
 	const types = events.map(e => e.type);
@@ -246,7 +244,7 @@ test('tools_auth suspends until confirmFunctions(id, "approve") resumes the run'
 // ────────────────────────────────────────────────────────────────────────────────
 // Tool authorization: reject ends the run without invoking the tool.
 // ────────────────────────────────────────────────────────────────────────────────
-test('confirmFunctions(id, "reject") drops the tool call and ends the run', async () => {
+test('{type:"auth", decision:"reject"} drops the tool call and ends the run', async () => {
 	const label = 'fake-chat-auth-reject';
 	await Symposium.loadModel(new ScriptedModel(label, [
 		{
@@ -275,19 +273,69 @@ test('confirmFunctions(id, "reject") drops the tool call and ends the run', asyn
 
 	const thread = await makeThread(agent, label);
 
+	const input = createInputChannel();
+	input.send('attempt');
+
 	const events = [];
-	const gen = agent.message('attempt', thread);
-	let result = await gen.next();
-	while (!result.done) {
-		events.push(result.value);
-		if (result.value.type === 'tools_auth')
-			queueMicrotask(() => agent.confirmFunctions(result.value.id, 'reject'));
-		result = await gen.next();
+	for await (const ev of agent.message(input, thread)) {
+		events.push(ev);
+		if (ev.type === 'tools_auth') {
+			input.send({type: 'auth', id: ev.id, decision: 'reject'});
+			input.close();
+		}
 	}
 
 	const types = events.map(e => e.type);
 	assert.deepEqual(types, ['start', 'tools_auth', 'end']);
 	assert.equal(guarded.called, 0);
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Tool authorization: closing the input channel without an auth response is
+// treated as reject + cancel — the tool never runs and the loop ends.
+// ────────────────────────────────────────────────────────────────────────────────
+test('input channel closing without auth response rejects and cancels', async () => {
+	const label = 'fake-chat-auth-close';
+	await Symposium.loadModel(new ScriptedModel(label, [
+		{
+			deltas: [],
+			messages: [new Message('assistant', [
+				{type: 'function', content: [{id: 'call_c', name: 'unguarded_close', arguments: {}}]},
+			])],
+		},
+	]));
+
+	class CloseTool extends Tool {
+		name = 'unguarded_close';
+		called = 0;
+		async getFunctions() {
+			return [{name: 'unguarded_close', description: 'guarded', parameters: {type: 'object', properties: {}}}];
+		}
+		async authorize() { return false; }
+		async callFunction() { this.called++; return {nope: true}; }
+	}
+
+	const tool = new CloseTool();
+	const agent = new Agent();
+	agent.default_model = label;
+	await agent.addTool(tool);
+	await agent.init();
+
+	const thread = await makeThread(agent, label);
+
+	const input = createInputChannel();
+	input.send('attempt');
+
+	const events = [];
+	for await (const ev of agent.message(input, thread)) {
+		events.push(ev);
+		if (ev.type === 'tools_auth')
+			input.close();
+	}
+
+	const types = events.map(e => e.type);
+	assert.deepEqual(types, ['start', 'tools_auth', 'end']);
+	assert.equal(tool.called, 0);
 });
 
 // ────────────────────────────────────────────────────────────────────────────────

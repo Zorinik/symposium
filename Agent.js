@@ -79,7 +79,6 @@ export default class Agent {
 		};
 
 		this.threads = new Map();
-		this._pendingAuth = new Map();
 		this._streamingInputs = new Map();
 	}
 
@@ -246,8 +245,9 @@ ${context_string}
 		const iterator = content[Symbol.asyncIterator]();
 		const notifier = makeNotifier();
 		const pendingMessages = [];
+		const pendingAuthResponses = new Map();
 		const controlFlags = {cancelled: false, readerFinished: false};
-		const inputState = {streaming: true, pendingMessages, controlFlags, notifier};
+		const inputState = {streaming: true, pendingMessages, pendingAuthResponses, controlFlags, notifier};
 		this._streamingInputs.set(thread.unique, inputState);
 
 		let readerPromise = Promise.resolve();
@@ -375,6 +375,11 @@ ${context_string}
 						notifier.signal();
 						return;
 					}
+					if (item.type === 'auth' && item.id) {
+						inputState.pendingAuthResponses.set(item.id, item.decision);
+						notifier.signal();
+						continue;
+					}
 					continue;
 				}
 				pendingMessages.push(item);
@@ -408,6 +413,26 @@ ${context_string}
 				return true;
 			if (state.controlFlags.readerFinished)
 				return false;
+			await state.notifier.wait();
+		}
+	}
+
+	async _awaitAuthDecision(thread, id) {
+		const state = this._streamingInputs.get(thread.unique);
+		if (!state)
+			return 'reject';
+		while (true) {
+			if (state.pendingAuthResponses.has(id)) {
+				const decision = state.pendingAuthResponses.get(id);
+				state.pendingAuthResponses.delete(id);
+				return decision;
+			}
+			if (state.controlFlags.cancelled)
+				return 'reject';
+			if (state.controlFlags.readerFinished) {
+				state.controlFlags.cancelled = true;
+				return 'reject';
+			}
 			await state.notifier.wait();
 		}
 	}
@@ -679,13 +704,6 @@ ${context_string}
 		}
 	}
 
-	confirmFunctions(id, decision) {
-		const resolver = this._pendingAuth.get(id);
-		if (!resolver)
-			throw new Error('No pending authorization request with id ' + id);
-		resolver(decision);
-	}
-
 	async *callFunctions(thread, completion, functions_to_call) {
 		const functions = await this.getFunctions(false);
 
@@ -702,18 +720,9 @@ ${context_string}
 
 		if (!is_authorized) {
 			const id = uuid();
-			let resolver;
-			const pending = new Promise(resolve => { resolver = resolve; });
-			this._pendingAuth.set(id, resolver);
-
 			yield {type: 'tools_auth', id, functions: functions_to_call};
 
-			let decision;
-			try {
-				decision = await pending;
-			} finally {
-				this._pendingAuth.delete(id);
-			}
+			const decision = await this._awaitAuthDecision(thread, id);
 
 			if (decision === 'reject')
 				return {type: 'void'};
