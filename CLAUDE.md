@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Symposium is a Node.js framework (ES modules, Node ≥18) for building LLM-powered agents. Published as the `symposium` npm package; consumed as a library, not a runnable app. No build or lint tooling. Test suite uses the built-in `node:test` runner — run with `npm test` (script: `node --test "test/**/*.test.js"`). Tests live under `test/` and mock provider SDKs to validate the model layer's streaming behavior without network access.
 
+The codebase was refactored to its current shape in the 3.0 release (async-generator API, streaming input channel, real model streaming, hybrid retry, `response_schema`). See `MIGRATION.md` for 2.x → 3.0 side-by-side patterns and `README.md` for consumer-facing docs.
+
 ## Architecture
 
 The framework is organized around a small set of cooperating classes at the repo root. Understanding the data flow between them is the fastest way to be productive.
