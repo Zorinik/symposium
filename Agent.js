@@ -68,7 +68,7 @@ export default class Agent {
 	default_model = 'gpt-4o';
 	max_retries = 5;
 	type = 'chat'; // chat, utility
-	utility = null;
+	response_schema = null; // raw JSON schema; when set, final assistant message is parsed against it
 	initialized = false;
 	enable_image_generation = false;
 
@@ -89,11 +89,11 @@ export default class Agent {
 		if (this.options.memory_handler)
 			this.options.memory_handler.setAgent(this);
 
-		if (this.type === 'utility') {
-			if (!this.utility || !this.utility.type)
-				throw new Error('Utility function not defined');
-			if (!['text', 'function', 'json'].includes(this.utility.type))
-				throw new Error('Bad utility definition');
+		if (this.response_schema !== null) {
+			if (typeof this.response_schema !== 'object' || Array.isArray(this.response_schema))
+				throw new Error('response_schema must be a JSON schema object');
+			if (typeof this.response_schema.type !== 'string')
+				throw new Error('response_schema must declare a top-level "type"');
 		}
 
 		this.initialized = true;
@@ -214,7 +214,22 @@ ${context_string}
 		return thread;
 	}
 
-	async *message(content, thread = null) {
+	message(content, thread = null) {
+		if (this.type === 'utility')
+			return this._messageAsValue(content, thread);
+		return this._messageAsStream(content, thread);
+	}
+
+	async _messageAsValue(content, thread) {
+		let value;
+		for await (const ev of this._messageAsStream(content, thread)) {
+			if (ev.type === 'result')
+				value = ev.value;
+		}
+		return value;
+	}
+
+	async *_messageAsStream(content, thread = null) {
 		if (!this.initialized)
 			throw new Error('Agent not initialized');
 
@@ -466,28 +481,25 @@ ${context_string}
 		const model = Symposium.getModel(thread.state.model);
 
 		const completion_options = {};
-		if (this.type === 'utility') {
-			if (['function', 'json'].includes(this.utility.type)) {
-				if (!this.utility.function || !this.utility.function.name || !this.utility.function.parameters)
-					throw new Error('Bad function definition');
+		if (this.response_schema) {
+			const schema = this.response_schema;
+			const converted = (schema.type === 'object' && model.structured_output)
+				? this.convertFunctionToResponseFormat(JSON.parse(JSON.stringify(schema)))
+				: null;
 
-				let response_format = null;
-				if (this.utility.type === 'json' && model.structured_output)
-					response_format = this.convertFunctionToResponseFormat(this.utility.function.parameters);
-
-				if (response_format && response_format.count <= 100) { // OpenAI does not support structured output if there are more than 100 parameters
-					completion_options.response_format = {
-						type: 'json_schema',
-						name: this.utility.function.name,
-						schema: response_format.obj,
-						strict: true,
-					};
-				} else {
-					completion_options.functions = [
-						this.utility.function,
-					];
-					completion_options.force_function = this.utility.function.name;
-				}
+			if (converted && converted.count <= 100) { // OpenAI does not support structured output if there are more than 100 parameters
+				completion_options.response_format = {
+					type: 'json_schema',
+					name: 'response',
+					schema: converted.obj,
+					strict: true,
+				};
+			} else {
+				completion_options.functions = [{
+					name: 'response',
+					parameters: schema,
+				}];
+				completion_options.force_function = 'response';
 			}
 		}
 
@@ -530,13 +542,14 @@ ${context_string}
 
 				const verdict = yield* this.handleCompletion(thread, completion);
 
+				if (verdict?.type === 'response') {
+					yield {type: 'result', value: verdict.value};
+					return;
+				}
+
 				switch (this.type) {
 					case 'utility':
-						if (verdict.type !== 'response')
-							throw new Error('Utility agent did not return a response');
-
-						yield {type: 'result', value: verdict.value};
-						return;
+						throw new Error('Utility agent did not return a response');
 
 					case 'chat':
 						if (verdict?.type === 'continue') {
@@ -679,12 +692,10 @@ ${context_string}
 			for (let m of message.content) {
 				switch (m.type) {
 					case 'text':
-						if (this.type === 'utility') {
-							if (this.utility.type === 'text')
-								return {type: 'response', value: await this.afterHandle(thread, completion, m.content)};
-							if (this.utility.type === 'json' && model.structured_output)
-								return {type: 'response', value: await this.afterHandle(thread, completion, JSON.parse(m.content))};
-						}
+						if (this.response_schema && model.structured_output)
+							return {type: 'response', value: await this.afterHandle(thread, completion, JSON.parse(m.content))};
+						if (this.type === 'utility' && !this.response_schema)
+							return {type: 'response', value: await this.afterHandle(thread, completion, m.content)};
 
 						yield {type: 'output', content: m};
 						break;
@@ -702,7 +713,7 @@ ${context_string}
 		}
 
 		if (functions.length) {
-			if (this.utility && ['function', 'json'].includes(this.utility.type))
+			if (this.response_schema)
 				return {type: 'response', value: await this.afterHandle(thread, completion, functions[0].arguments)};
 
 			return yield* this.callFunctions(thread, completion, functions);

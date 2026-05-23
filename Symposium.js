@@ -138,9 +138,8 @@ export default class Symposium {
 	static async prompt(system, prompt, options = {}) {
 		const agent = new Agent(options.agent || {});
 		agent.type = 'utility';
-		agent.utility = options.response || {
-			type: 'text',
-		};
+		if (options.response_schema)
+			agent.response_schema = options.response_schema;
 
 		agent.doInitThread = async thread => {
 			if (options.model)
@@ -151,11 +150,6 @@ export default class Symposium {
 		await agent.init();
 		const thread = await agent.getThread();
 
-		let value;
-		for await (const ev of agent.message(prompt, thread)) {
-			if (ev.type === 'result')
-				value = ev.value;
-		}
-		return value;
+		return await agent.message(prompt, thread);
 	}
 }

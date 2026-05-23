@@ -323,7 +323,9 @@ With a storage adapter in place, conversations will be saved and loaded automati
 
 ### Utility Agents
 
-Besides `chat` agents, you can create `utility` agents. These are designed for specific, one-shot tasks like data extraction or classification, rather than open-ended conversation. They typically return structured JSON.
+Besides `chat` agents, you can create `utility` agents. These are designed for specific, one-shot tasks like data extraction or classification, rather than open-ended conversation. `await agent.message(...)` resolves to the value directly — no generator to iterate.
+
+Set `response_schema` (a plain JSON schema) to enforce structured output. The agent uses the provider's structured-output mode when available, otherwise falls back to a forced function call. Without `response_schema`, a utility agent simply returns the assistant's text.
 
 ```javascript
 // TextExtractorAgent.js
@@ -332,24 +334,18 @@ import { Agent } from 'symposium';
 export default class TextExtractorAgent extends Agent {
 	name = 'TextExtractorAgent';
 	type = 'utility';
-	utility = {
-		type: 'json',
-		function: {
-			name: 'extract_data',
-			parameters: {
-				type: 'object',
-				properties: {
-					name: { type: 'string' },
-					email: { type: 'string' },
-				},
-				required: ['name', 'email'],
-			},
+	response_schema = {
+		type: 'object',
+		properties: {
+			name: { type: 'string' },
+			email: { type: 'string' },
 		},
+		required: ['name', 'email'],
 	};
 
-    async doInitThread(thread) {
-        await thread.addMessage('system', 'Extract the name and email from the text.');
-    }
+	async doInitThread(thread) {
+		await thread.addMessage('system', 'Extract the name and email from the text.');
+	}
 }
 
 // Usage
@@ -357,6 +353,25 @@ const extractor = new TextExtractorAgent();
 await extractor.init();
 const result = await extractor.message('My name is John Doe and my email is john.doe@example.com');
 console.log(result); // { name: 'John Doe', email: 'john.doe@example.com' }
+```
+
+### Structured output for chat agents
+
+`response_schema` is independent of the agent type — set it on a `chat` agent to constrain the final assistant message to your schema. The event stream behaves normally; a final `{type:'result', value}` event carries the parsed object before `end`.
+
+```javascript
+const agent = new MyChatAgent();
+agent.response_schema = {
+	type: 'object',
+	properties: { city: { type: 'string' } },
+	required: ['city'],
+};
+await agent.init();
+
+for await (const ev of agent.message('Look up the weather and reply in JSON')) {
+	if (ev.type === 'result')
+		console.log(ev.value); // { city: '...' }
+}
 ```
 
 ## API Reference

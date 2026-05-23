@@ -167,9 +167,9 @@ test('chat agent runs a tool then yields tool/tool_response/output', async () =>
 });
 
 // ────────────────────────────────────────────────────────────────────────────────
-// Utility text agent
+// Utility text agent — direct await returns the raw text value (no generator)
 // ────────────────────────────────────────────────────────────────────────────────
-test('utility text agent yields start → result → end with the parsed value', async () => {
+test('utility text agent: await message() returns the text directly', async () => {
 	const label = 'fake-utility-text';
 	await Symposium.loadModel(new ScriptedModel(label, [{
 		deltas: [],
@@ -179,18 +179,109 @@ test('utility text agent yields start → result → end with the parsed value',
 	const agent = new Agent();
 	agent.default_model = label;
 	agent.type = 'utility';
-	agent.utility = {type: 'text'};
+	await agent.init();
+
+	const thread = await makeThread(agent, label);
+	const value = await agent.message('what?', thread);
+	assert.equal(value, 'The answer is 42');
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Utility agent with response_schema, structured-output path: text content IS JSON
+// ────────────────────────────────────────────────────────────────────────────────
+test('utility agent with response_schema (structured_output): await returns parsed object', async () => {
+	const label = 'fake-utility-json-structured';
+	class StructuredScriptedModel extends ScriptedModel {
+		async getModels() {
+			return new Map([[this.label, {name: this.label, tokens: 1000, tools: true, structured_output: true}]]);
+		}
+	}
+	await Symposium.loadModel(new StructuredScriptedModel(label, [{
+		deltas: [],
+		messages: [new Message('assistant', [{type: 'text', content: '{"name":"John","email":"john@example.com"}'}])],
+	}]));
+
+	const agent = new Agent();
+	agent.default_model = label;
+	agent.type = 'utility';
+	agent.response_schema = {
+		type: 'object',
+		properties: {
+			name: {type: 'string'},
+			email: {type: 'string'},
+		},
+		required: ['name', 'email'],
+	};
+	await agent.init();
+
+	const thread = await makeThread(agent, label);
+	const value = await agent.message('My name is John, email john@example.com', thread);
+	assert.deepEqual(value, {name: 'John', email: 'john@example.com'});
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Utility agent with response_schema, function-call fallback (no structured_output)
+// ────────────────────────────────────────────────────────────────────────────────
+test('utility agent with response_schema (function-call fallback): await returns parsed args', async () => {
+	const label = 'fake-utility-json-funccall';
+	await Symposium.loadModel(new ScriptedModel(label, [{
+		deltas: [],
+		messages: [new Message('assistant', [
+			{type: 'function', content: [{id: 'call_r', name: 'response', arguments: {name: 'Jane', email: 'jane@example.com'}}]},
+		])],
+	}]));
+
+	const agent = new Agent();
+	agent.default_model = label;
+	agent.type = 'utility';
+	agent.response_schema = {
+		type: 'object',
+		properties: {
+			name: {type: 'string'},
+			email: {type: 'string'},
+		},
+		required: ['name', 'email'],
+	};
+	await agent.init();
+
+	const thread = await makeThread(agent, label);
+	const value = await agent.message('Extract Jane jane@example.com', thread);
+	assert.deepEqual(value, {name: 'Jane', email: 'jane@example.com'});
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Chat agent with response_schema: events stream, final {type:'result', value}
+// ────────────────────────────────────────────────────────────────────────────────
+test('chat agent with response_schema yields normal events plus final result event', async () => {
+	const label = 'fake-chat-schema';
+	class StructuredScriptedModel extends ScriptedModel {
+		async getModels() {
+			return new Map([[this.label, {name: this.label, tokens: 1000, tools: true, structured_output: true}]]);
+		}
+	}
+	await Symposium.loadModel(new StructuredScriptedModel(label, [{
+		deltas: [{type: 'text_delta', content: '{"city":"Rome"}'}],
+		messages: [new Message('assistant', [{type: 'text', content: '{"city":"Rome"}'}])],
+	}]));
+
+	const agent = new Agent();
+	agent.default_model = label;
+	agent.response_schema = {
+		type: 'object',
+		properties: {city: {type: 'string'}},
+		required: ['city'],
+	};
 	await agent.init();
 
 	const thread = await makeThread(agent, label);
 
 	const events = [];
-	for await (const ev of agent.message('what?', thread))
+	for await (const ev of agent.message('Where?', thread))
 		events.push(ev);
 
 	const types = events.map(e => e.type);
-	assert.deepEqual(types, ['start', 'result', 'end']);
-	assert.equal(events[1].value, 'The answer is 42');
+	assert.deepEqual(types, ['start', 'chunk', 'result', 'end']);
+	assert.deepEqual(events[2].value, {city: 'Rome'});
 });
 
 // ────────────────────────────────────────────────────────────────────────────────
