@@ -57,7 +57,7 @@ export default class Summarizer extends ContextHandler {
 	async doSummarize(thread, maxLength) {
 		thread.addMessage('system', 'Summarize the conversation up to this moment.');
 		const summary = await this.agent.generateCompletion(thread, {
-			functions: [
+			tools: [
 				{
 					name: 'summarize',
 					description: 'Generate a summary of the conversation in ' + Math.round(maxLength / 2) + ' words at most, in a way that it is easy for you to keep track of the important info. Do not omit relevant information you need to remember in order to continue the conversation.',
@@ -72,7 +72,7 @@ export default class Summarizer extends ContextHandler {
 					}
 				},
 			],
-			force_function: 'summarize',
+			force_tool: 'summarize',
 		});
 
 		if (!summary)
@@ -83,11 +83,11 @@ export default class Summarizer extends ContextHandler {
 			if (message.role === 'system' && !message.tags.includes('summary')) {
 				summarizedThread.messages.push(message);
 			} else {
-				const functionsResponse = Symposium.extractFunctionsFromResponse(summary);
-				if (functionsResponse.length)
+				const toolCallsResponse = Symposium.extractToolCallsFromResponse(summary);
+				if (toolCallsResponse.length)
 					throw new Error('Errore durante la generazione di un riassunto interno');
 
-				summarizedThread.addMessage('system', "This is what happened until now:\n" + functionsResponse[0].summary, undefined, ['summary']);
+				summarizedThread.addMessage('system', "This is what happened until now:\n" + toolCallsResponse[0].summary, undefined, ['summary']);
 				break;
 			}
 		}

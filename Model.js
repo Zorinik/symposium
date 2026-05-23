@@ -7,7 +7,7 @@ export default class Model {
 		return new Map();
 	}
 
-	async *generate(model, thread, functions = [], options = {}) {
+	async *generate(model, thread, tools = [], options = {}) {
 		// Subclasses implement as async generator: yield deltas during streaming,
 		// return assembled Message[] when complete.
 		// Delta shape:
@@ -22,55 +22,55 @@ export default class Model {
 		throw new Error('countTokens not implemented in this model');
 	}
 
-	parseOptions(options = {}, functions = []) {
+	parseOptions(options = {}, tools = []) {
 		options = {
-			functions: null,
-			force_function: null,
+			tools: null,
+			force_tool: null,
 			...options,
 		};
 
-		if (options.functions !== null)
-			functions = options.functions;
+		if (options.tools !== null)
+			tools = options.tools;
 
-		if (options.force_function && !functions.find(f => f.name === options.force_function))
-			throw new Error('Function ' + options.force_function + ' not found.');
+		if (options.force_tool && !tools.find(t => t.name === options.force_tool))
+			throw new Error('Tool ' + options.force_tool + ' not found.');
 
-		return {options, functions};
+		return {options, tools};
 	}
 
-	promptFromFunctions(options, functions) {
-		if (options.force_function)
-			functions = functions.filter(f => f.name !== options.force_function);
+	promptFromTools(options, tools) {
+		if (options.force_tool)
+			tools = tools.filter(t => t.name !== options.force_tool);
 
-		if (!functions.length)
+		if (!tools.length)
 			return '';
 
 		let message;
-		if (options.force_function) {
+		if (options.force_tool) {
 			message = "Nella prossima risposta, rispondi UNICAMENTE seguendo le seguenti istruzioni:\n";
-			message += functions[0].description + "\n";
-			delete functions[0].description;
-			message += "Rispondi con un messaggio che inizia con le parole:\nCALL " + options.force_function + "\nE poi a capo un oggetto JSON che segue queste direttive OpenAPI:\n";
+			message += tools[0].description + "\n";
+			delete tools[0].description;
+			message += "Rispondi con un messaggio che inizia con le parole:\nCALL " + options.force_tool + "\nE poi a capo un oggetto JSON che segue queste direttive OpenAPI:\n";
 		} else {
-			message = "Hai a disposizione alcune funzioni che puoi chiamare per ottenere risposte o compiere azioni. Ricorda che devi attendere la risposta dalla funzione per sapere se ha avuto successo. Per chiamare una funzione scrivi un messaggio che inizia con CALL nome_funzione e a capo inserisci il JSON con gli argomenti; delimitando il tutto da 3 caratteri ``` - ad esempio:\n" +
+			message = "Hai a disposizione alcuni strumenti che puoi chiamare per ottenere risposte o compiere azioni. Ricorda che devi attendere la risposta dello strumento per sapere se ha avuto successo. Per chiamare uno strumento scrivi un messaggio che inizia con CALL nome_strumento e a capo inserisci il JSON con gli argomenti; delimitando il tutto da 3 caratteri ``` - ad esempio:\n" +
 				"```\n" +
 				"CALL create_user\n" +
 				'{"name":"test"}' + "\n" +
 				"```\n\n" +
-				"Lista delle funzioni che hai a disposizione:\n";
+				"Lista degli strumenti che hai a disposizione:\n";
 
-			for (let f of functions)
-				message += '- ' + f.name + "\n " + f.description + "\n";
+			for (let t of tools)
+				message += '- ' + t.name + "\n " + t.description + "\n";
 		}
 
 		message += "\nOpenAPI specs:\n\n";
-		for (let f of functions) {
-			if (!f.parameters)
+		for (let t of tools) {
+			if (!t.parameters)
 				continue;
-			message += '=== ' + f.name + " ===\n" + JSON.stringify(f.parameters.properties) + "\n\n";
+			message += '=== ' + t.name + " ===\n" + JSON.stringify(t.parameters.properties) + "\n\n";
 		}
 
-		if (options.force_function)
+		if (options.force_tool)
 			message += "\nNella risposta non deve esserci NIENTE ALTRO se non queste due cose, non saranno prese in considerazione dal sistema altro genere di risposte.";
 
 		return message;

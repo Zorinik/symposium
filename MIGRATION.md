@@ -115,7 +115,7 @@ input.send('Run that risky thing');
 
 for await (const ev of agent.message(input)) {
 	if (ev.type === 'tools_auth') {
-		const decision = await askUser(ev.functions); // 'approve' | 'approve_always' | 'reject'
+		const decision = await askUser(ev.tools); // 'approve' | 'approve_always' | 'reject'
 		input.send({ type: 'auth', id: ev.id, decision });
 	}
 }
@@ -252,16 +252,118 @@ Deleted. The class only existed to paper over the listener-attach race created b
 
 ## 9. Things that did NOT change
 
--	Agent / Thread / Tool / Message / Context class shapes.
+-	Agent / Thread / Toolkit / Message / Context class shapes.
 -	Model registration (drop a file in `Models/`, `Symposium.init()` picks it up).
 -	Storage adapter interface (`init` / `get` / `set`).
 -	`Symposium.prompt()` — still a one-shot value-returning helper.
 -	`Symposium.transcribe()` / `Symposium.embed()`.
 -	Real-time session API (`agent.createRealtimeSession()`).
--	Italian-language fallback prompt in `Model.promptFromFunctions()` and the realtime session preamble.
+-	Italian-language fallback prompt in `Model.promptFromTools()` and the realtime session preamble.
 
 ## 10. Notes & gotchas
 
 -	**Backpressure.** Async generators are pull-driven: a slow consumer pauses the model upstream. This is generally an improvement over fire-and-forget emitter events, but it's a behavioral change to be aware of.
 -	**Multi-consumer.** Async generators are single-consumer. If you need to fan out an agent run to two listeners, tee it manually.
 -	**`message()` is not `async`.** It returns the generator synchronously for chat agents (no `await`). Utility agents return a Promise — same as before in spirit, but it now resolves to the value directly without a separate event loop.
+
+---
+
+# Additional breaking changes in 3.0
+
+3.0 ships a vocabulary cleanup to align with industry terminology (OpenAI/Anthropic/LangChain all use **tool** and **toolkit**, not **function**). It also adds first-class **MCP** support — see the `addMCPServer()` section in `README.md` / `CLAUDE.md`. The renames below are purely cosmetic but pervasive; runtime semantics are unchanged.
+
+## A. `Tool` class → `Toolkit`
+
+The base class for "a thing that publishes one or more LLM-callable tools" is now `Toolkit`. The word **tool** is reserved for the individual callable unit (which is what the LLM actually sees).
+
+| 2.x                                                 | 3.x                                                    |
+|-----------------------------------------------------|--------------------------------------------------------|
+| `Tool.js` / `GetContextTool.js`                     | `Toolkit.js` / `GetContextToolkit.js`                  |
+| `import { Tool } from 'symposium'`                  | `import { Toolkit } from 'symposium'`                  |
+| `class Weather extends Tool`                        | `class Weather extends Toolkit`                        |
+| `agent.addTool(t)`                                  | `agent.addToolkit(t)`                                  |
+| `agent.tools` — `Map<toolkitName, Toolkit>`         | `agent.toolkits` — `Map<toolkitName, Toolkit>`         |
+| *(internal: `agent.functions` / `agent.toolIndex`)* | `agent.tools` — `Map<toolName, {toolkit, definition}>` |
+
+The two maps swapped roles on purpose: `agent.tools` is now the flat lookup of LLM-callables (matching how every provider's API talks about "tools"), and `agent.toolkits` is the registry of `Toolkit` instances. Lookup entries are now `{toolkit, definition}` (was `{tool, function}`).
+
+## B. `function` → `tool` everywhere
+
+The framework no longer uses the word **function** for LLM-callable units. Method names, parameter names, message content types, option keys, and event payload keys all changed.
+
+### Method renames
+
+| 2.x                                              | 3.x                                        |
+|--------------------------------------------------|--------------------------------------------|
+| `Toolkit.getFunctions()`                         | `Toolkit.getTools()`                       |
+| `Toolkit.callFunction(thread, name, payload)`    | `Toolkit.callTool(thread, name, payload)`  |
+| `Agent.getFunctions()`                           | `Agent.getTools()`                         |
+| `Agent.callFunction()` / `Agent.callFunctions()` | `Agent.callTool()` / `Agent.callTools()`   |
+| `Agent.parseFunctions()`                         | `Agent.parseTools()`                       |
+| `Model.promptFromFunctions()`                    | `Model.promptFromTools()`                  |
+| `Symposium.extractFunctionsFromResponse()`       | `Symposium.extractToolCallsFromResponse()` |
+
+### Provider signature
+
+```javascript
+// before
+const parsed = this.parseOptions(options, functions);
+
+// after
+const parsed = this.parseOptions(options, tools);
+```
+
+`parseOptions()` now returns `{options, tools}` (was `{options, functions}`).
+
+### Options
+
+| 2.x                              | 3.0                          |
+|----------------------------------|------------------------------|
+| `options.functions: [...]`       | `options.tools: [...]`       |
+| `options.force_function: 'name'` | `options.force_tool: 'name'` |
+
+### Internal Message content block types
+
+If you build `Message` objects by hand or inspect a thread's history, the content-block tags changed:
+
+| 2.x                                                          | 3.0                                                          |
+|--------------------------------------------------------------|--------------------------------------------------------------|
+| `{type: 'function', content: [{id, name, arguments}, ...]}`  | `{type: 'tool_call', content: [{id, name, arguments}, ...]}` |
+| `{type: 'function_response', content: {name, id, response}}` | `{type: 'tool_result', content: {name, id, response}}`       |
+
+Provider wire formats (e.g. OpenAI's `{type: 'function', function: {...}}` tool-definition shape and `tool_calls[].type = 'function'`) are unchanged — those are the providers' contract, not Symposium's.
+
+### Event payload key
+
+```javascript
+// before
+if (ev.type === 'tools_auth') {
+	const decision = await askUser(ev.functions);
+	input.send({ type: 'auth', id: ev.id, decision });
+}
+
+// after
+if (ev.type === 'tools_auth') {
+	const decision = await askUser(ev.tools);
+	input.send({ type: 'auth', id: ev.id, decision });
+}
+```
+
+## C. Mechanical migration
+
+For most consumers, a project-wide find-and-replace covers it:
+
+```
+Tool                 →  Toolkit          (class references, imports — careful with the literal string "tool")
+extends Tool         →  extends Toolkit
+GetContextTool       →  GetContextToolkit
+addTool              →  addToolkit
+getFunctions         →  getTools
+callFunction         →  callTool
+parseFunctions       →  parseTools
+promptFromFunctions  →  promptFromTools
+force_function       →  force_tool
+type: 'function'     →  type: 'tool_call'        (only inside Symposium Message content)
+type: 'function_response' →  type: 'tool_result' (only inside Symposium Message content)
+ev.functions         →  ev.tools                 (only on tools_auth events)
+```

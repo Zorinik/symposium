@@ -56,19 +56,19 @@ export default class Symposium {
 		return this.models.get(name);
 	}
 
-	static extractFunctionsFromResponse(messages) {
-		const functions = [];
+	static extractToolCallsFromResponse(messages) {
+		const tool_calls = [];
 		for (let message of messages) {
-			const functionResponse = message.content.filter(c => c.type === 'function');
-			if (functionResponse.length) {
-				for (let f of functionResponse) {
-					for (let r of f.content)
-						functions.push(r.arguments);
+			const toolBlocks = message.content.filter(c => c.type === 'tool_call');
+			if (toolBlocks.length) {
+				for (let t of toolBlocks) {
+					for (let r of t.content)
+						tool_calls.push(r.arguments);
 				}
 			}
 		}
 
-		return functions;
+		return tool_calls;
 	}
 
 	static async transcribe(audio, prompt = null, model = null) {

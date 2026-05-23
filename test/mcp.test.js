@@ -52,7 +52,7 @@ class FakeMCPServer extends MCPServer {
 	}
 }
 
-// Minimal scripted model so the agent can be instantiated and getFunctions() probed
+// Minimal scripted model so the agent can be instantiated and getTools() probed
 // without needing real provider SDKs.
 class ScriptedModel extends Model {
 	constructor(label, script = []) {
@@ -92,9 +92,9 @@ test('MCPServer prefixes tool names with the server name', async () => {
 		],
 	});
 	const server = new FakeMCPServer({name: 'github', transport: 'stdio', command: 'noop'}, client);
-	await agent.addTool(server);
+	await agent.addToolkit(server);
 
-	const fns = await server.getFunctions();
+	const fns = await server.getTools();
 	const names = fns.map(f => f.name).sort();
 	assert.deepEqual(names, ['github__read_file', 'github__search']);
 
@@ -112,52 +112,52 @@ test('two MCPServers with colliding raw tool names coexist via prefixing', async
 	const gh = new FakeMCPServer({name: 'github', transport: 'stdio', command: 'noop'}, ghClient);
 	const fs = new FakeMCPServer({name: 'fs', transport: 'stdio', command: 'noop'}, fsClient);
 
-	await agent.addTool(gh);
-	await agent.addTool(fs);
+	await agent.addToolkit(gh);
+	await agent.addToolkit(fs);
 
-	const funcMap = await agent.getFunctions(false);
-	assert.ok(funcMap.has('github__search'));
-	assert.ok(funcMap.has('fs__search'));
+	const tools = await agent.getTools(false);
+	assert.ok(tools.has('github__search'));
+	assert.ok(tools.has('fs__search'));
 
 	const thread = new Thread('test-collide', agent);
 	thread.state = {model: 'fake-mcp-collide'};
 
-	await funcMap.get('github__search').tool.callFunction(thread, 'github__search', {q: 'hi'});
-	await funcMap.get('fs__search').tool.callFunction(thread, 'fs__search', {q: 'hi'});
+	await tools.get('github__search').toolkit.callTool(thread, 'github__search', {q: 'hi'});
+	await tools.get('fs__search').toolkit.callTool(thread, 'fs__search', {q: 'hi'});
 
 	assert.deepEqual(ghClient.callToolCalls, [{name: 'search', arguments: {q: 'hi'}}]);
 	assert.deepEqual(fsClient.callToolCalls, [{name: 'search', arguments: {q: 'hi'}}]);
 });
 
-test('MCPServer.callFunction strips the prefix and forwards to client.callTool', async () => {
+test('MCPServer.callTool strips the prefix and forwards to client.callTool', async () => {
 	const agent = await makeAgent('fake-mcp-forward');
 	const client = new FakeMCPClient({tools: [{name: 'do_thing', description: '', inputSchema: {type: 'object', properties: {}}}]});
 	const server = new FakeMCPServer({name: 'svc', transport: 'stdio', command: 'noop'}, client);
-	await agent.addTool(server);
+	await agent.addToolkit(server);
 
 	const thread = new Thread('test-forward', agent);
 	thread.state = {model: 'fake-mcp-forward'};
 
-	const result = await server.callFunction(thread, 'svc__do_thing', {x: 1});
+	const result = await server.callTool(thread, 'svc__do_thing', {x: 1});
 
 	assert.deepEqual(client.callToolCalls, [{name: 'do_thing', arguments: {x: 1}}]);
 	assert.ok(result.content);
 	assert.equal(result.content[0].text, 'ok:do_thing');
 });
 
-test('MCPServer.callFunction throws when MCP result has isError', async () => {
+test('MCPServer.callTool throws when MCP result has isError', async () => {
 	const agent = await makeAgent('fake-mcp-error');
 	const client = new FakeMCPClient({tools: [{name: 'broken'}]});
 	client.callTool = async () => ({isError: true, content: [{type: 'text', text: 'boom'}]});
 
 	const server = new FakeMCPServer({name: 'svc', transport: 'stdio', command: 'noop'}, client);
-	await agent.addTool(server);
+	await agent.addToolkit(server);
 
 	const thread = new Thread('test-error', agent);
 	thread.state = {model: 'fake-mcp-error'};
 
 	await assert.rejects(
-		() => server.callFunction(thread, 'svc__broken', {}),
+		() => server.callTool(thread, 'svc__broken', {}),
 		/boom/,
 	);
 });
@@ -175,7 +175,7 @@ test('addMCPServer with resources:true registers each resource as an on_request 
 
 	// Replicate addMCPServer manually but with the test subclass so we can inject the fake client.
 	const server = new FakeMCPServer({name: 'svc', transport: 'stdio', command: 'noop', resources: true}, client);
-	await agent.addTool(server);
+	await agent.addToolkit(server);
 	const {default: MCPResource} = await import('../Contexts/MCPResource.js');
 	for (const res of await server.listResources()) {
 		await agent.addContext(new MCPResource(server, res), {
@@ -188,7 +188,7 @@ test('addMCPServer with resources:true registers each resource as an on_request 
 	thread.state = {model: 'fake-mcp-res'};
 	await agent.initThread(thread);
 
-	assert.ok(agent.tools.has('get_context'), 'get_context tool should be auto-injected');
+	assert.ok(agent.toolkits.has('get_context'), 'get_context toolkit should be auto-injected');
 
 	const titles = agent.context.map(c => c.title).sort();
 	assert.deepEqual(titles, ['doc-a', 'doc-b']);
@@ -203,7 +203,7 @@ test('MCPServer.close() shuts the client down', async () => {
 	const agent = await makeAgent('fake-mcp-close');
 	const client = new FakeMCPClient({tools: [{name: 'x'}]});
 	const server = new FakeMCPServer({name: 'svc', transport: 'stdio', command: 'noop'}, client);
-	await agent.addTool(server);
+	await agent.addToolkit(server);
 
 	await server.close();
 	assert.equal(client.closed, true);

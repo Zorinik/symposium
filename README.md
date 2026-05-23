@@ -40,7 +40,7 @@ Symposium uses environment variables to configure access to various services. Yo
 -	**`Symposium`**: Static class that acts as the central hub. Responsible for loading models and initializing the storage adapter.
 -	**`Agent`**: The heart of the framework. Extend this class to define an agent's prompt, behavior, and tools.
 -	**`Thread`**: A single conversation with an agent. Maintains message history and per-conversation state.
--	**`Tool`**: Base class for tools that an `Agent` can call.
+-	**`Toolkit`**: Base class for toolkits — groupings of one or more tools that an `Agent` can call.
 -	**`Message`**: A typed message inside a `Thread`.
 -	**`ContextHandler`** / **`Summarizer`**: Pre-execute hooks for managing long-context strategies.
 -	**`createInputChannel`**: Helper that creates an `AsyncIterable` with `send(item)` / `close()` for streaming input into an agent.
@@ -159,7 +159,7 @@ All events yielded from the generator:
 | `reasoning` | `{content}` | Reasoning text. |
 | `tool` | `{id, name, arguments}` | Emitted before invoking a tool. |
 | `tool_response` | `{name, success, response?, error?}` | Emitted after the tool returns or throws. |
-| `tools_auth` | `{id, functions}` | Yielded when authorization is required — see below. |
+| `tools_auth` | `{id, tools}` | Yielded when authorization is required — see below. |
 | `retry` | `{attempt, reason}` | Only when an error occurs *after* at least one chunk has already streamed for the current turn. |
 | `result` | `{value}` | Only when `response_schema` is set — parsed structured answer. |
 | `end` | `{thread}` | Always yielded last, even on throw. |
@@ -170,16 +170,16 @@ Errors throw out of the generator. There is no `error` event.
 
 ### Using Tools
 
-Tools allow your agent to interact with the outside world. Extend `Tool` and expose one or more functions.
+Tools allow your agent to interact with the outside world. Extend `Toolkit` and expose one or more tools.
 
 ```javascript
-// WeatherTool.js
-import { Tool } from 'symposium';
+// WeatherToolkit.js
+import { Toolkit } from 'symposium';
 
-export default class WeatherTool extends Tool {
-	name = 'WeatherTool';
+export default class WeatherToolkit extends Toolkit {
+	name = 'WeatherToolkit';
 
-	async getFunctions() {
+	async getTools() {
 		return [{
 			name: 'get_weather',
 			description: 'Get the current weather for a specific city',
@@ -193,18 +193,18 @@ export default class WeatherTool extends Tool {
 		}];
 	}
 
-	async callFunction(thread, name, payload) {
+	async callTool(thread, name, payload) {
 		if (name === 'get_weather')
 			return { temperature: '25°C', condition: 'sunny' };
 	}
 }
 ```
 
-Add the tool to your agent:
+Add the toolkit to your agent:
 
 ```javascript
 const agent = new MyChatAgent();
-await agent.addTool(new WeatherTool());
+await agent.addToolkit(new WeatherToolkit());
 await agent.init();
 
 for await (const ev of agent.message("What's the weather in Paris?")) {
@@ -216,19 +216,19 @@ Tools within a single LLM turn are executed sequentially, in the order the model
 
 ### Tool Authorization
 
-To require explicit approval for a tool, override `Tool.authorize()`. When it returns `false`, the agent yields a `tools_auth` event and suspends. The consumer resumes the run by sending an `auth` control message through the input channel.
+To require explicit approval for a tool, override `Toolkit.authorize()`. When it returns `false`, the agent yields a `tools_auth` event and suspends. The consumer resumes the run by sending an `auth` control message through the input channel.
 
 ```javascript
-import { Tool } from 'symposium';
+import { Toolkit } from 'symposium';
 
-class DangerousTool extends Tool {
+class DangerousToolkit extends Toolkit {
 	async authorize(thread, name, payload) {
 		return false; // always ask
 	}
 	async authorizeAlways(thread, name, payload) {
 		// Persist an "always approve" decision somewhere (DB, file, etc.).
 	}
-	// ... getFunctions / callFunction
+	// ... getTools / callTool
 }
 ```
 
@@ -240,13 +240,13 @@ input.send('Please run that risky operation');
 
 for await (const ev of agent.message(input)) {
 	if (ev.type === 'tools_auth') {
-		const decision = await askUser(ev.functions); // 'approve' | 'approve_always' | 'reject'
+		const decision = await askUser(ev.tools); // 'approve' | 'approve_always' | 'reject'
 		input.send({ type: 'auth', id: ev.id, decision });
 	}
 }
 ```
 
-`'approve_always'` calls `tool.authorizeAlways()` on each pending function so the decision is persisted. If the input channel closes while a `tools_auth` is pending, the decision is treated as `'reject'` and the run is cancelled. If you call `agent.message()` with a plain string (no channel), any auth request auto-rejects, since there is no way to deliver a decision.
+`'approve_always'` calls `tool.authorizeAlways()` on each pending tool so the decision is persisted. If the input channel closes while a `tools_auth` is pending, the decision is treated as `'reject'` and the run is cancelled. If you call `agent.message()` with a plain string (no channel), any auth request auto-rejects, since there is no way to deliver a decision.
 
 ### Streaming Input
 
@@ -421,7 +421,7 @@ High-level overview — see source for full details.
 
 -	`constructor(options)` — Optional `memory_handler` and `logger`.
 -	`init()` — Must be called before use.
--	`addTool(tool)` — Add a `Tool` instance.
+-	`addToolkit(toolkit)` — Add a `Toolkit` instance.
 -	`message(content, thread)` — Send a message. Returns an async generator for chat agents; resolves to the parsed value (Promise) for utility agents.
 -	`getThread(id)` — Retrieve a `Thread` instance.
 -	`setModel(thread, modelLabel)` — Change the LLM for a thread.
@@ -434,10 +434,12 @@ High-level overview — see source for full details.
 -	`setState(state, save)`
 -	`loadState()` / `storeState()`
 
-### `Tool`
+### `Toolkit`
 
--	`getFunctions()` — Abstract. Return an array of function definitions for the LLM.
--	`callFunction(thread, name, payload)` — Abstract. Called when the LLM invokes one of the tool's functions.
+A `Toolkit` groups one or more LLM-callable tools. Extend it to publish your own; `MCPServer` is itself a `Toolkit` that exposes whatever tools the remote MCP server lists.
+
+-	`getTools()` — Abstract. Return an array of tool definitions for the LLM.
+-	`callTool(thread, name, payload)` — Abstract. Called when the LLM invokes one of the tools.
 -	`authorize(thread, name, payload)` — Optional. Return `false` to require explicit consumer approval (`tools_auth` event).
 -	`authorizeAlways(thread, name, payload)` — Optional. Called when the consumer responds with `'approve_always'`.
 

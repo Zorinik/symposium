@@ -64,7 +64,7 @@ test('GroqModel accumulates tool_call deltas across chunks', async () => {
 
 	assert.deepEqual(value[0].content, [
 		{
-			type: 'function',
+			type: 'tool_call',
 			content: [{id: 'c1', name: 'sum', arguments: {x: 5}}],
 		},
 	]);

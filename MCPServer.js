@@ -1,8 +1,8 @@
-import Tool from "./Tool.js";
+import Toolkit from "./Toolkit.js";
 
 const PREFIX_SEPARATOR = '__';
 
-export default class MCPServer extends Tool {
+export default class MCPServer extends Toolkit {
 	constructor(config = {}) {
 		super();
 
@@ -90,7 +90,7 @@ export default class MCPServer extends Tool {
 		throw new Error('Unknown MCPServer transport: ' + transport);
 	}
 
-	async getFunctions() {
+	async getTools() {
 		const out = [];
 		for (const [prefixed, entry] of this._toolsByPrefixed) {
 			out.push({
@@ -102,7 +102,7 @@ export default class MCPServer extends Tool {
 		return out;
 	}
 
-	async callFunction(thread, name, payload) {
+	async callTool(thread, name, payload) {
 		const entry = this._toolsByPrefixed.get(name);
 		if (!entry)
 			return {error: `MCP tool ${name} not found on server ${this.serverName}`};

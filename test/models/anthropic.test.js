@@ -92,7 +92,7 @@ test('AnthropicModel buffers input_json_delta and yields a complete tool_call', 
 
 	assert.deepEqual(value[0].content, [
 		{
-			type: 'function',
+			type: 'tool_call',
 			content: [{id: 'tool_1', name: 'do_thing', arguments: {a: 1, b: 'x'}}],
 		},
 	]);

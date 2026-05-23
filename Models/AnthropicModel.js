@@ -47,19 +47,19 @@ export default class AnthropicModel extends Model {
 		return this.anthropic;
 	}
 
-	async *generate(model, thread, functions = [], options = {}) {
+	async *generate(model, thread, tools = [], options = {}) {
 		try {
-			const parsed = this.parseOptions(options, functions);
+			const parsed = this.parseOptions(options, tools);
 			options = parsed.options;
-			functions = parsed.functions;
+			tools = parsed.tools;
 
 			let [system, messages] = await this.convertMessages(thread);
 
-			if (functions.length && !model.tools) {
-				// Se il modello non supporta nativamente le funzioni, aggiungo il prompt al messaggio di sistema
-				const functions_prompt = this.promptFromFunctions(options, functions);
-				system += "\n\n" + functions_prompt;
-				functions = [];
+			if (tools.length && !model.tools) {
+				// Se il modello non supporta nativamente gli strumenti, aggiungo il prompt al messaggio di sistema
+				const tools_prompt = this.promptFromTools(options, tools);
+				system += "\n\n" + tools_prompt;
+				tools = [];
 			}
 
 			const completion_payload = {
@@ -72,18 +72,18 @@ export default class AnthropicModel extends Model {
 				},
 				betas: ["interleaved-thinking-2025-05-14"],
 				messages,
-				tools: functions.map(f => ({
-					name: f.name,
-					description: f.description,
-					input_schema: f.parameters,
-					required: f.required || undefined,
+				tools: tools.map(t => ({
+					name: t.name,
+					description: t.description,
+					input_schema: t.parameters,
+					required: t.required || undefined,
 				})),
 			};
 
-			if (options.force_function) {
+			if (options.force_tool) {
 				completion_payload.tool_choice = {
 					type: 'tool',
-					name: options.force_function,
+					name: options.force_tool,
 				};
 
 				delete completion_payload.thinking;
@@ -148,7 +148,7 @@ export default class AnthropicModel extends Model {
 
 						case 'tool_use':
 							message_content.push({
-								type: 'function',
+								type: 'tool_call',
 								content: [
 									{
 										id: m.id,
@@ -181,7 +181,7 @@ export default class AnthropicModel extends Model {
 				console.warn('Rate limite exceeded for Anthropic API, waiting 60 seconds...');
 				await new Promise(resolve => setTimeout(resolve, 60000));
 				if ((options.counter || 0) < 3)
-					return yield* this.generate(model, thread, functions, {...options, counter: (options.counter || 0) + 1});
+					return yield* this.generate(model, thread, tools, {...options, counter: (options.counter || 0) + 1});
 				else
 					throw new Error('Rate limit exceeded for Anthropic API, aborting.');
 			}
@@ -206,7 +206,7 @@ export default class AnthropicModel extends Model {
 							});
 							break;
 
-						case 'function':
+						case 'tool_call':
 							content.push({
 								type: 'tool_use',
 								name: c.content[0].name,
@@ -215,7 +215,7 @@ export default class AnthropicModel extends Model {
 							});
 							break;
 
-						case 'function_response':
+						case 'tool_result':
 							content.push({
 								type: 'tool_result',
 								content: JSON.stringify(c.content.response),

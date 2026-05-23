@@ -3,7 +3,7 @@
 import Symposium from "./Symposium.js";
 import Agent from "./Agent.js";
 import Thread from "./Thread.js";
-import Tool from "./Tool.js";
+import Toolkit from "./Toolkit.js";
 import Logger from "./Logger.js";
 
 import ContextHandler from "./ContextHandler.js";
@@ -22,7 +22,7 @@ export {
 	Symposium,
 	Agent,
 	Thread,
-	Tool,
+	Toolkit,
 	Logger,
 	ContextHandler,
 	Summarizer,

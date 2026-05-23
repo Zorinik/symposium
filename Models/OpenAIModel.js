@@ -77,16 +77,16 @@ export default class OpenAIModel extends Model {
 		return this.openai;
 	}
 
-	async *generate(model, thread, functions = [], options = {}) {
-		const parsed = this.parseOptions(options, functions);
+	async *generate(model, thread, tools = [], options = {}) {
+		const parsed = this.parseOptions(options, tools);
 		options = parsed.options;
-		functions = parsed.functions;
+		tools = parsed.tools;
 
 		let messages = thread.messages;
 
-		if (functions.length && !model.tools) {
-			// Se il modello non supporta nativamente le funzioni, inserisco il prompt ad hoc come ultimo messaggio di sistema
-			const functions_prompt = this.promptFromFunctions(options, functions);
+		if (tools.length && !model.tools) {
+			// Se il modello non supporta nativamente gli strumenti, inserisco il prompt ad hoc come ultimo messaggio di sistema
+			const tools_prompt = this.promptFromTools(options, tools);
 			let system_messages = [], other_messages = [], first_found = false;
 			for (let message of messages) {
 				if (!first_found && message.role !== 'system')
@@ -98,39 +98,39 @@ export default class OpenAIModel extends Model {
 					other_messages.push(message);
 			}
 
-			system_messages.push(new Message('system', functions_prompt));
+			system_messages.push(new Message('system', tools_prompt));
 
 			messages = [...system_messages, ...other_messages];
-			functions = [];
+			tools = [];
 		}
 
 		const convertedMessages = [];
 		for (let m of messages)
 			convertedMessages.push(...(await this.convertMessage(m, model)));
 
-		const tools = functions.map(f => ({
+		const apiTools = tools.map(t => ({
 			type: 'function',
-			...f,
+			...t,
 		}));
 
 		if (model.tools && model.image_generation && options.image_generation)
-			tools.push({type: 'image_generation'});
+			apiTools.push({type: 'image_generation'});
 
 		const completion_payload = {
 			model: model.name,
 			input: convertedMessages,
 			store: false,
 			include: ['reasoning.encrypted_content'],
-			tools,
+			tools: apiTools,
 			reasoning: {
 				summary: 'auto',
 			},
 		};
 
-		if (options.force_function) {
+		if (options.force_tool) {
 			completion_payload.tool_choice = {
 				type: 'function',
-				name: options.force_function,
+				name: options.force_tool,
 			};
 		}
 
@@ -215,7 +215,7 @@ export default class OpenAIModel extends Model {
 
 				case 'function_call':
 					message_content.push({
-						type: 'function',
+						type: 'tool_call',
 						content: [
 							{
 								id: output.call_id,
@@ -329,7 +329,7 @@ export default class OpenAIModel extends Model {
 					}
 					break;
 
-				case 'function':
+				case 'tool_call':
 					if (model.tools) {
 						messages.push({
 							type: 'function_call',
@@ -340,12 +340,12 @@ export default class OpenAIModel extends Model {
 					} else {
 						messages.push({
 							role,
-							content: c.content.map(f => '```CALL \n' + f.name + '\n' + JSON.stringify(f.arguments || {}) + '\n```').join("\n\n"),
+							content: c.content.map(t => '```CALL \n' + t.name + '\n' + JSON.stringify(t.arguments || {}) + '\n```').join("\n\n"),
 						});
 					}
 					break;
 
-				case 'function_response':
+				case 'tool_result':
 					if (model.tools) {
 						messages.push({
 							type: 'function_call_output',
@@ -355,7 +355,7 @@ export default class OpenAIModel extends Model {
 					} else {
 						messages.push({
 							role: 'user',
-							content: 'FUNCTION RESPONSE:\n' + JSON.stringify(c.content.response),
+							content: 'TOOL RESPONSE:\n' + JSON.stringify(c.content.response),
 						});
 					}
 					break;

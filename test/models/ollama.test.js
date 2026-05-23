@@ -69,7 +69,7 @@ test('OllamaModel yields tool_call from final chunk', async () => {
 
 	assert.deepEqual(value[0].content, [
 		{
-			type: 'function',
+			type: 'tool_call',
 			content: [{name: 'do_thing', arguments: {a: 1}}],
 		},
 	]);

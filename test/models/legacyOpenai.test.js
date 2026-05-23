@@ -64,7 +64,7 @@ test('LegacyOpenAIModel accumulates tool_call deltas across chunks and yields a 
 
 	assert.deepEqual(value[0].content, [
 		{
-			type: 'function',
+			type: 'tool_call',
 			content: [{id: 'call_xyz', name: 'do_thing', arguments: {a: 1}}],
 		},
 	]);
@@ -82,6 +82,6 @@ test('LegacyOpenAIModel combines text + tool_calls in one Message', async () => 
 
 	assert.equal(value[0].content.length, 2);
 	assert.deepEqual(value[0].content[0], {type: 'text', content: 'Calling now'});
-	assert.equal(value[0].content[1].type, 'function');
+	assert.equal(value[0].content[1].type, 'tool_call');
 	assert.equal(value[0].content[1].content[0].name, 'f');
 });

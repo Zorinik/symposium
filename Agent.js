@@ -2,10 +2,10 @@ import {v7 as uuid} from 'uuid';
 
 import Symposium from "./Symposium.js";
 import Thread from "./Thread.js";
-import Tool from "./Tool.js";
+import Toolkit from "./Toolkit.js";
 import Context from "./Context.js";
 import Text from "./Contexts/Text.js";
-import GetContextTool from "./GetContextTool.js";
+import GetContextToolkit from "./GetContextToolkit.js";
 import MCPServer from "./MCPServer.js";
 import MCPResource from "./Contexts/MCPResource.js";
 
@@ -64,8 +64,8 @@ export default class Agent {
 	description = null;
 	options = {};
 	threads;
-	functions = null;
-	tools = new Map();
+	tools = null;
+	toolkits = new Map();
 	context = [];
 	default_model = 'gpt-4o';
 	max_retries = 5;
@@ -117,14 +117,14 @@ export default class Agent {
 		return {};
 	}
 
-	async addTool(tool) {
-		if (!(tool instanceof Tool) || !tool.name)
-			throw new Error('Tool must be an instance of Tool class');
-		if (this.tools.has(tool.name))
-			throw new Error('Tool with name ' + tool.name + ' already exists in agent');
+	async addToolkit(toolkit) {
+		if (!(toolkit instanceof Toolkit) || !toolkit.name)
+			throw new Error('Toolkit must be an instance of Toolkit class');
+		if (this.toolkits.has(toolkit.name))
+			throw new Error('Toolkit with name ' + toolkit.name + ' already exists in agent');
 
-		await tool.init(this);
-		this.tools.set(tool.name, tool);
+		await toolkit.init(this);
+		this.toolkits.set(toolkit.name, toolkit);
 	}
 
 	async addContext(context, options = {}) {
@@ -148,7 +148,7 @@ export default class Agent {
 
 	async addMCPServer(config) {
 		const server = new MCPServer(config);
-		await this.addTool(server);
+		await this.addToolkit(server);
 
 		if (config.resources) {
 			const resources = await server.listResources();
@@ -189,8 +189,8 @@ export default class Agent {
 			let context_string = context_texts.join('\n\n');
 			if (is_there_on_request) {
 				context_string = '<important>Some of the context files are available to you immediately here, while longer texts may be available only on request; you are provided with a title and a description of these files. If you think it may be useful for your current task, you can request the text via the get_context tool - IMPORTANT: use the title of the file verbatim as it is provided</important>' + context_string;
-				if (!this.tools.has('get_context'))
-					await this.addTool(new GetContextTool(this));
+				if (!this.toolkits.has('get_context'))
+					await this.addToolkit(new GetContextToolkit(this));
 			}
 			context_string = `<context_info>
 ${context_string}
@@ -514,11 +514,11 @@ ${context_string}
 					strict: true,
 				};
 			} else {
-				completion_options.functions = [{
+				completion_options.tools = [{
 					name: 'response',
 					parameters: schema,
 				}];
-				completion_options.force_function = 'response';
+				completion_options.force_tool = 'response';
 			}
 		}
 
@@ -645,7 +645,7 @@ ${context_string}
 
 	async *generateCompletion(thread, options = {}) {
 		const model = Symposium.getModel(thread.state.model);
-		const it = model.class.generate(model, thread, await this.getFunctions(), {
+		const it = model.class.generate(model, thread, await this.getTools(), {
 			...options,
 			image_generation: this.enable_image_generation,
 		});
@@ -672,10 +672,10 @@ ${context_string}
 			throw error;
 		}
 
-		return model.tools ? messages : messages.map(m => this.parseFunctions(m));
+		return model.tools ? messages : messages.map(m => this.parseTools(m));
 	}
 
-	parseFunctions(message) {
+	parseTools(message) {
 		const newContent = [];
 		for (let m of message.content) {
 			if (m.type === 'text' && m.content.match(/```\nCALL [A-Za-z0-9_]+\n[\s\S]*```/)) {
@@ -687,7 +687,7 @@ ${context_string}
 
 					const match = text.match(/^CALL ([A-Za-z0-9_]+)\n([\s\S]*)$/);
 					if (match)
-						newContent.push({type: 'function', content: [{name: match[1], arguments: JSON.parse(match[2] || '{}')}]});
+						newContent.push({type: 'tool_call', content: [{name: match[1], arguments: JSON.parse(match[2] || '{}')}]});
 					else
 						newContent.push({type: 'text', content: text});
 				}
@@ -703,7 +703,7 @@ ${context_string}
 	async *handleCompletion(thread, completion) {
 		const model = Symposium.getModel(thread.state.model);
 
-		const functions = [];
+		const tool_calls = [];
 		for (let message of completion) {
 			thread.addDirectMessage(message);
 			await this.log('ai_message', message.content);
@@ -723,19 +723,19 @@ ${context_string}
 						yield {type: 'output', content: m};
 						break;
 
-					case 'function':
-						for (let f of m.content)
-							functions.push(f);
+					case 'tool_call':
+						for (let t of m.content)
+							tool_calls.push(t);
 						break;
 				}
 			}
 		}
 
-		if (functions.length) {
+		if (tool_calls.length) {
 			if (this.response_schema)
-				return {type: 'response', value: await this.afterHandle(thread, completion, functions[0].arguments)};
+				return {type: 'response', value: await this.afterHandle(thread, completion, tool_calls[0].arguments)};
 
-			return yield* this.callFunctions(thread, completion, functions);
+			return yield* this.callTools(thread, completion, tool_calls);
 		} else {
 			await thread.storeState();
 			await this.afterHandle(thread, completion);
@@ -743,15 +743,15 @@ ${context_string}
 		}
 	}
 
-	async *callFunctions(thread, completion, functions_to_call) {
-		const functions = await this.getFunctions(false);
+	async *callTools(thread, completion, tools_to_call) {
+		const tools = await this.getTools(false);
 
 		let is_authorized = true;
-		for (let f of functions_to_call) {
-			if (!functions.has(f.name))
-				throw new Error('Unrecognized function ' + f.name);
+		for (let t of tools_to_call) {
+			if (!tools.has(t.name))
+				throw new Error('Unrecognized tool ' + t.name);
 
-			if (!(await functions.get(f.name).tool.authorize(thread, f.name, f.arguments))) {
+			if (!(await tools.get(t.name).toolkit.authorize(thread, t.name, t.arguments))) {
 				is_authorized = false;
 				break;
 			}
@@ -759,7 +759,7 @@ ${context_string}
 
 		if (!is_authorized) {
 			const id = uuid();
-			yield {type: 'tools_auth', id, functions: functions_to_call};
+			yield {type: 'tools_auth', id, tools: tools_to_call};
 
 			const decision = await this._awaitAuthDecision(thread, id);
 
@@ -767,30 +767,30 @@ ${context_string}
 				return {type: 'void'};
 
 			if (decision === 'approve_always') {
-				for (let f of functions_to_call)
-					await functions.get(f.name).tool.authorizeAlways(thread, f.name, f.arguments);
+				for (let t of tools_to_call)
+					await tools.get(t.name).toolkit.authorizeAlways(thread, t.name, t.arguments);
 			} else if (decision !== 'approve') {
 				throw new Error('Bad authorization decision: ' + decision);
 			}
 		}
 
 		const responses = [];
-		for (let f of functions_to_call)
-			responses.push(yield* this.callFunction(thread, functions, f));
+		for (let t of tools_to_call)
+			responses.push(yield* this.callTool(thread, tools, t));
 
 		for (let response of responses) {
 			thread.addMessage('tool', [
 				{
-					type: 'function_response',
+					type: 'tool_result',
 					content: {
-						name: response.function.name,
-						id: response.function.id || undefined,
+						name: response.tool_call.name,
+						id: response.tool_call.id || undefined,
 						response: response.response,
 					},
 				},
-			], response.function.name);
+			], response.tool_call.name);
 
-			await this.log('function_response', response);
+			await this.log('tool_result', response);
 		}
 
 		thread.flushPlannedMessages();
@@ -799,51 +799,51 @@ ${context_string}
 		return {type: 'continue'};
 	}
 
-	async getFunctions(parsed = true) {
-		if (this.functions === null) {
-			this.functions = new Map();
-			for (let tool of this.tools.values()) {
-				let functions = await tool.getFunctions();
-				for (let func of functions) {
-					if (this.functions.has(func.name))
-						throw new Error('Duplicate function ' + func.name + ' in agent');
+	async getTools(parsed = true) {
+		if (this.tools === null) {
+			this.tools = new Map();
+			for (let toolkit of this.toolkits.values()) {
+				let toolDefs = await toolkit.getTools();
+				for (let toolDef of toolDefs) {
+					if (this.tools.has(toolDef.name))
+						throw new Error('Duplicate tool ' + toolDef.name + ' in agent');
 
-					this.functions.set(func.name, {
-						tool,
-						function: func,
+					this.tools.set(toolDef.name, {
+						toolkit,
+						definition: toolDef,
 					});
 				}
 			}
 		}
 
 		if (parsed)
-			return Array.from(this.functions.values()).map(f => f.function)
+			return Array.from(this.tools.values()).map(e => e.definition)
 		else
-			return this.functions;
+			return this.tools;
 	}
 
-	async *callFunction(thread, functions, function_call) {
-		const function_definition = functions.get(function_call.name);
+	async *callTool(thread, tools, tool_call) {
+		const entry = tools.get(tool_call.name);
 
-		await this.log('function_call', function_call);
-		yield {type: 'tool', id: function_call.id, name: function_call.name, arguments: function_call.arguments};
+		await this.log('tool_call', tool_call);
+		yield {type: 'tool', id: tool_call.id, name: tool_call.name, arguments: tool_call.arguments};
 
 		try {
-			const response = await function_definition.tool.callFunction(thread, function_call.name, function_call.arguments);
-			yield {type: 'tool_response', name: function_definition.tool.name, success: true, response};
+			const response = await entry.toolkit.callTool(thread, tool_call.name, tool_call.arguments);
+			yield {type: 'tool_response', name: entry.toolkit.name, success: true, response};
 
 			return {
 				type: 'response',
 				response,
-				function: function_call,
+				tool_call,
 			};
 		} catch (error) {
-			yield {type: 'tool_response', name: function_definition.tool.name, success: false, error: error.message || error};
+			yield {type: 'tool_response', name: entry.toolkit.name, success: false, error: error.message || error};
 
 			return {
 				type: 'response',
 				response: {error},
-				function: function_call,
+				tool_call,
 			};
 		}
 	}
@@ -892,7 +892,7 @@ ${context_string}
 		if (conversation.length && options.include_thread)
 			instructions += '\n\n# Ecco la tua conversazione fino ad ora: #\n' + conversation.join('\n');
 
-		const tools = (await this.getFunctions()).map(t => ({
+		const tools = (await this.getTools()).map(t => ({
 			type: 'function',
 			...t,
 		}));

@@ -1,15 +1,15 @@
-export default class Tool {
+export default class Toolkit {
 	name = '';
 
 	async init(agent) {
 	}
 
-	async getFunctions() {
+	async getTools() {
 		return [];
 	}
 
-	async callFunction(thread, name, payload) {
-		return {error: 'callFunction is yet to be implemented'};
+	async callTool(thread, name, payload) {
+		return {error: 'callTool is yet to be implemented'};
 	}
 
 	async authorize(thread, name, payload) {

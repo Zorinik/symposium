@@ -6,7 +6,7 @@ import Symposium from '../Symposium.js';
 import Model from '../Model.js';
 import Message from '../Message.js';
 import Thread from '../Thread.js';
-import Tool from '../Tool.js';
+import Toolkit from '../Toolkit.js';
 
 import {drain} from './helpers/mockSdk.js';
 import {createInputChannel} from '../InputChannel.js';
@@ -123,7 +123,7 @@ test('chat agent runs a tool then yields tool/tool_response/output', async () =>
 		{
 			deltas: [],
 			messages: [new Message('assistant', [
-				{type: 'function', content: [{id: 'call_1', name: 'echo', arguments: {msg: 'hi'}}]},
+				{type: 'tool_call', content: [{id: 'call_1', name: 'echo', arguments: {msg: 'hi'}}]},
 			])],
 		},
 		{
@@ -132,19 +132,19 @@ test('chat agent runs a tool then yields tool/tool_response/output', async () =>
 		},
 	]));
 
-	class EchoTool extends Tool {
+	class EchoTool extends Toolkit {
 		name = 'echo';
-		async getFunctions() {
+		async getTools() {
 			return [{name: 'echo', description: 'echoes', parameters: {type: 'object', properties: {msg: {type: 'string'}}}}];
 		}
-		async callFunction(_thread, _name, payload) {
+		async callTool(_thread, _name, payload) {
 			return {echoed: payload.msg};
 		}
 	}
 
 	const agent = new Agent();
 	agent.default_model = label;
-	await agent.addTool(new EchoTool());
+	await agent.addToolkit(new EchoTool());
 	await agent.init();
 
 	const thread = await makeThread(agent, label);
@@ -227,7 +227,7 @@ test('utility agent with response_schema (function-call fallback): await returns
 	await Symposium.loadModel(new ScriptedModel(label, [{
 		deltas: [],
 		messages: [new Message('assistant', [
-			{type: 'function', content: [{id: 'call_r', name: 'response', arguments: {name: 'Jane', email: 'jane@example.com'}}]},
+			{type: 'tool_call', content: [{id: 'call_r', name: 'response', arguments: {name: 'Jane', email: 'jane@example.com'}}]},
 		])],
 	}]));
 
@@ -294,7 +294,7 @@ test('tools_auth suspends until {type:"auth", decision:"approve"} resumes the ru
 		{
 			deltas: [],
 			messages: [new Message('assistant', [
-				{type: 'function', content: [{id: 'call_a', name: 'sensitive', arguments: {x: 1}}]},
+				{type: 'tool_call', content: [{id: 'call_a', name: 'sensitive', arguments: {x: 1}}]},
 			])],
 		},
 		{
@@ -303,18 +303,18 @@ test('tools_auth suspends until {type:"auth", decision:"approve"} resumes the ru
 		},
 	]));
 
-	class SensitiveTool extends Tool {
+	class SensitiveTool extends Toolkit {
 		name = 'sensitive';
-		async getFunctions() {
+		async getTools() {
 			return [{name: 'sensitive', description: 'guarded', parameters: {type: 'object', properties: {x: {type: 'number'}}}}];
 		}
 		async authorize() { return false; }
-		async callFunction() { return {ok: true}; }
+		async callTool() { return {ok: true}; }
 	}
 
 	const agent = new Agent();
 	agent.default_model = label;
-	await agent.addTool(new SensitiveTool());
+	await agent.addToolkit(new SensitiveTool());
 	await agent.init();
 
 	const thread = await makeThread(agent, label);
@@ -334,7 +334,7 @@ test('tools_auth suspends until {type:"auth", decision:"approve"} resumes the ru
 	const types = events.map(e => e.type);
 	assert.deepEqual(types, ['start', 'tools_auth', 'tool', 'tool_response', 'chunk', 'output', 'end']);
 	assert.ok(events[1].id);
-	assert.equal(events[1].functions[0].name, 'sensitive');
+	assert.equal(events[1].tools[0].name, 'sensitive');
 });
 
 // ────────────────────────────────────────────────────────────────────────────────
@@ -346,25 +346,25 @@ test('{type:"auth", decision:"reject"} drops the tool call and ends the run', as
 		{
 			deltas: [],
 			messages: [new Message('assistant', [
-				{type: 'function', content: [{id: 'call_b', name: 'guarded', arguments: {}}]},
+				{type: 'tool_call', content: [{id: 'call_b', name: 'guarded', arguments: {}}]},
 			])],
 		},
 	]));
 
-	class GuardedTool extends Tool {
+	class GuardedTool extends Toolkit {
 		name = 'guarded';
 		called = 0;
-		async getFunctions() {
+		async getTools() {
 			return [{name: 'guarded', description: 'guarded', parameters: {type: 'object', properties: {}}}];
 		}
 		async authorize() { return false; }
-		async callFunction() { this.called++; return {nope: true}; }
+		async callTool() { this.called++; return {nope: true}; }
 	}
 
 	const guarded = new GuardedTool();
 	const agent = new Agent();
 	agent.default_model = label;
-	await agent.addTool(guarded);
+	await agent.addToolkit(guarded);
 	await agent.init();
 
 	const thread = await makeThread(agent, label);
@@ -396,25 +396,25 @@ test('input channel closing without auth response rejects and cancels', async ()
 		{
 			deltas: [],
 			messages: [new Message('assistant', [
-				{type: 'function', content: [{id: 'call_c', name: 'unguarded_close', arguments: {}}]},
+				{type: 'tool_call', content: [{id: 'call_c', name: 'unguarded_close', arguments: {}}]},
 			])],
 		},
 	]));
 
-	class CloseTool extends Tool {
+	class CloseTool extends Toolkit {
 		name = 'unguarded_close';
 		called = 0;
-		async getFunctions() {
+		async getTools() {
 			return [{name: 'unguarded_close', description: 'guarded', parameters: {type: 'object', properties: {}}}];
 		}
 		async authorize() { return false; }
-		async callFunction() { this.called++; return {nope: true}; }
+		async callTool() { this.called++; return {nope: true}; }
 	}
 
 	const tool = new CloseTool();
 	const agent = new Agent();
 	agent.default_model = label;
-	await agent.addTool(tool);
+	await agent.addToolkit(tool);
 	await agent.init();
 
 	const thread = await makeThread(agent, label);

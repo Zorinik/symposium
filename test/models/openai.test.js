@@ -94,7 +94,7 @@ test('OpenAIModel yields tool_call on output_item.done and assembles a function 
 
 	assert.deepEqual(value[0].content, [
 		{
-			type: 'function',
+			type: 'tool_call',
 			content: [{id: 'call_abc', name: 'do_thing', arguments: {a: 1}}],
 		},
 	]);

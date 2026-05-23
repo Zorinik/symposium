@@ -1,6 +1,6 @@
-import Tool from "./Tool.js";
+import Toolkit from "./Toolkit.js";
 
-export default class GetContextTool extends Tool {
+export default class GetContextToolkit extends Toolkit {
 	name = 'get_context';
 
 	constructor(agent) {
@@ -8,7 +8,7 @@ export default class GetContextTool extends Tool {
 		this.agent = agent;
 	}
 
-	async getFunctions() {
+	async getTools() {
 		return [
 			{
 				name: 'get_context',
@@ -26,9 +26,9 @@ export default class GetContextTool extends Tool {
 		];
 	}
 
-	async callFunction(thread, name, payload) {
+	async callTool(thread, name, payload) {
 		if (name !== 'get_context')
-			return {error: `Function ${name} not found`};
+			return {error: `Tool ${name} not found`};
 
 		const title = payload.title;
 		const context = this.agent.context.find(c => c.title === title && c.options.type === 'on_request');
