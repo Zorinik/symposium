@@ -172,7 +172,7 @@ export default class Agent {
 				case 'always':
 					const text = await context.getText();
 					if (text)
-						context_texts.push('<context>' + text + '</context>');
+						context_texts.push('<context' + (title ? ' title="' + title.replace(/"/g, '&quot;') + '"' : '') + '>' + text + '</context>');
 					break;
 
 				case 'on_request':
