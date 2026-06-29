@@ -32,6 +32,11 @@ export default class Model {
 		if (options.tools !== null)
 			tools = options.tools;
 
+		// Additive tools (e.g. the synthetic `response` tool for schema output) ride
+		// alongside the toolkit tools instead of replacing them.
+		if (options.append_tools)
+			tools = [...tools, ...options.append_tools];
+
 		if (options.force_tool && !tools.find(t => t.name === options.force_tool))
 			throw new Error('Tool ' + options.force_tool + ' not found.');
 

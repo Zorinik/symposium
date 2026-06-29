@@ -343,6 +343,8 @@ for await (const ev of agent.message('Look up the weather and reply in JSON')) {
 
 Internally, structured-output-capable OpenAI models use `response_format: json_schema`; otherwise the agent falls back to a forced function call and parses its arguments.
 
+**Combining `response_schema` with toolkits.** If the agent also has toolkit tools, the schema is not forced up-front (that would stop the model from calling its tools). Instead an extra `response` tool is offered alongside the real ones: the model calls its tools across turns and, when ready, calls `response` with the final schema-conforming answer, which surfaces as the `{type:'result', value}` event. This lets a chat agent search/act on its own and still return a validated object. `response` is a reserved tool name while `response_schema` is set, so don't expose a toolkit tool by that name.
+
 ### Real-time Voice and Transcription
 
 Symposium has built-in support for audio transcription and real-time voice sessions, currently powered by OpenAI.

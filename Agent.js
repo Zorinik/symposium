@@ -502,23 +502,39 @@ ${context_string}
 		const completion_options = {};
 		if (this.response_schema) {
 			const schema = this.response_schema;
-			const converted = (schema.type === 'object' && model.structured_output)
-				? this.convertFunctionToResponseFormat(JSON.parse(JSON.stringify(schema)))
-				: null;
 
-			if (converted && converted.count <= 100) { // OpenAI does not support structured output if there are more than 100 parameters
-				completion_options.response_format = {
-					type: 'json_schema',
+			// When the agent also exposes toolkit tools, the structured answer cannot be
+			// forced up-front (that would prevent the model from calling its tools first).
+			// Instead we offer an extra `response` tool, alongside the real ones, that the
+			// model calls once it is ready to answer. handleCompletion() treats a `response`
+			// call as terminal and every other call as a normal tool invocation.
+			const has_tools = (await this.getTools()).length > 0;
+
+			if (has_tools) {
+				completion_options.append_tools = [{
 					name: 'response',
-					schema: converted.obj,
-					strict: true,
-				};
-			} else {
-				completion_options.tools = [{
-					name: 'response',
+					description: 'Call this tool with your final answer, conforming to the required schema, only once you have gathered everything you need. Do not call it before you are ready to give the definitive answer.',
 					parameters: schema,
 				}];
-				completion_options.force_tool = 'response';
+			} else {
+				const converted = (schema.type === 'object' && model.structured_output)
+					? this.convertFunctionToResponseFormat(JSON.parse(JSON.stringify(schema)))
+					: null;
+
+				if (converted && converted.count <= 100) { // OpenAI does not support structured output if there are more than 100 parameters
+					completion_options.response_format = {
+						type: 'json_schema',
+						name: 'response',
+						schema: converted.obj,
+						strict: true,
+					};
+				} else {
+					completion_options.tools = [{
+						name: 'response',
+						parameters: schema,
+					}];
+					completion_options.force_tool = 'response';
+				}
 			}
 		}
 
@@ -733,10 +749,18 @@ ${context_string}
 		}
 
 		if (tool_calls.length) {
-			if (this.response_schema)
+			// With response_schema set, a call to the synthetic `response` tool is the
+			// terminal answer; any other call is a real toolkit tool to be executed.
+			const response_call = this.response_schema ? tool_calls.find(t => t.name === 'response') : null;
+			if (response_call)
+				return {type: 'response', value: await this.afterHandle(thread, completion, response_call.arguments)};
+
+			// response_schema with no toolkit tools: legacy forced-`response` path — the lone
+			// tool call carries the answer even if the model named it unexpectedly.
+			if (this.response_schema && (await this.getTools()).length === 0)
 				return {type: 'response', value: await this.afterHandle(thread, completion, tool_calls[0].arguments)};
 
-			return yield* this.callTools(thread, completion, tool_calls);
+			return yield* this.callTools(thread, completion, tool_calls.filter(t => t.name !== 'response'));
 		} else {
 			await thread.storeState();
 			await this.afterHandle(thread, completion);

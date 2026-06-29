@@ -285,6 +285,80 @@ test('chat agent with response_schema yields normal events plus final result eve
 });
 
 // ────────────────────────────────────────────────────────────────────────────────
+// response_schema + toolkit: the model may call its real tools across turns and then
+// deliver the structured answer through the synthetic `response` tool. Verifies the
+// two are NOT mutually exclusive (regression guard for the schema-vs-tools fix).
+// ────────────────────────────────────────────────────────────────────────────────
+test('chat agent with response_schema + toolkit: runs a tool then `response` yields the result', async () => {
+	const label = 'fake-chat-schema-tools';
+	await Symposium.loadModel(new ScriptedModel(label, [
+		{
+			deltas: [],
+			messages: [new Message('assistant', [
+				{type: 'tool_call', content: [{id: 'call_s', name: 'search', arguments: {q: 'Rome'}}]},
+			])],
+		},
+		{
+			deltas: [],
+			messages: [new Message('assistant', [
+				{type: 'tool_call', content: [{id: 'call_r', name: 'response', arguments: {unique_code: 'IT-05-087', confidence: 0.9}}]},
+			])],
+		},
+	]));
+
+	let searched = null;
+	class SearchTool extends Toolkit {
+		name = 'search';
+		async getTools() {
+			return [{name: 'search', description: 'search the master tree', parameters: {type: 'object', properties: {q: {type: 'string'}}}}];
+		}
+		async callTool(_thread, _name, payload) {
+			searched = payload.q;
+			return {results: [{unique_code: 'IT-05-087'}]};
+		}
+	}
+
+	const agent = new Agent();
+	agent.default_model = label;
+	agent.response_schema = {
+		type: 'object',
+		properties: {unique_code: {type: 'string'}, confidence: {type: 'number'}},
+		required: ['unique_code', 'confidence'],
+	};
+	await agent.addToolkit(new SearchTool());
+	await agent.init();
+
+	const thread = await makeThread(agent, label);
+
+	const events = [];
+	for await (const ev of agent.message('match Rome', thread))
+		events.push(ev);
+
+	const types = events.map(e => e.type);
+	// the real `search` tool ran (tool + tool_response), THEN `response` carried the answer
+	assert.deepEqual(types, ['start', 'tool', 'tool_response', 'result', 'end']);
+	assert.equal(searched, 'Rome');
+	assert.equal(events[1].name, 'search');
+	assert.deepEqual(events.find(e => e.type === 'result').value, {unique_code: 'IT-05-087', confidence: 0.9});
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// parseOptions: append_tools augments the toolkit tools rather than replacing them,
+// so the synthetic `response` tool coexists with the real ones.
+// ────────────────────────────────────────────────────────────────────────────────
+test('Model.parseOptions merges append_tools alongside the toolkit tools', () => {
+	const model = new Model();
+	const toolkitTools = [{name: 'search'}, {name: 'get_chain'}];
+
+	const {tools} = model.parseOptions({append_tools: [{name: 'response'}]}, toolkitTools);
+	assert.deepEqual(tools.map(t => t.name), ['search', 'get_chain', 'response']);
+
+	// force_tool validation still sees the appended tool
+	const {tools: forced} = model.parseOptions({append_tools: [{name: 'response'}], force_tool: 'response'}, toolkitTools);
+	assert.ok(forced.find(t => t.name === 'response'));
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
 // Tool authorization: tool.authorize() returns false, generator suspends until an
 // {type:'auth'} control message arrives on the input channel.
 // ────────────────────────────────────────────────────────────────────────────────
