@@ -76,6 +76,33 @@ export default class OpenAIModel extends Model {
 				audio: false,
 				image_generation: false,
 			}],
+			['gpt-5.6-luna', {
+				name: 'gpt-5.6-luna',
+				tiktoken: 'gpt-5',
+				tokens: 1000000,
+				tools: true,
+				structured_output: true,
+				audio: false,
+				image_generation: false,
+			}],
+			['gpt-5.6-terra', {
+				name: 'gpt-5.6-terra',
+				tiktoken: 'gpt-5',
+				tokens: 1000000,
+				tools: true,
+				structured_output: true,
+				audio: false,
+				image_generation: false,
+			}],
+			['gpt-5.6-sol', {
+				name: 'gpt-5.6-sol',
+				tiktoken: 'gpt-5',
+				tokens: 1000000,
+				tools: true,
+				structured_output: true,
+				audio: false,
+				image_generation: false,
+			}],
 		]);
 	}
 

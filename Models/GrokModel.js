@@ -24,6 +24,11 @@ export default class GrokModel extends OpenAIModel {
 				tokens: 2000000,
 				tools: true,
 			}],
+			['grok-4.5', {
+				name: 'grok-4.5',
+				tokens: 5000000,
+				tools: true,
+			}],
 		]);
 	}
 
