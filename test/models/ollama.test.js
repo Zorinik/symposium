@@ -88,3 +88,18 @@ test('OllamaModel emulates streaming when only a single full chunk arrives', asy
 	]);
 	assert.deepEqual(value[0].content, [{type: 'text', content: 'One shot response'}]);
 });
+
+test('OllamaModel yields a normalized usage delta from the final done chunk', async () => {
+	const m = new OllamaModel();
+	installFakeOllama(m, [
+		{message: {content: 'Hello'}},
+		{message: {content: ''}, done: true, prompt_eval_count: 60, eval_count: 15},
+	]);
+
+	const {deltas} = await drain(m.generate(buildModelDef(), fakeThread()));
+
+	assert.deepEqual(deltas[deltas.length - 1], {
+		type: 'usage',
+		content: {input: 60, output: 15, cached: 0, context: 75},
+	});
+});

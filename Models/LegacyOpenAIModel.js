@@ -70,12 +70,16 @@ export default class LegacyOpenAIModel extends Model {
 		if (!completion_payload.tools.length)
 			delete completion_payload.tools;
 
-		const stream = await this.getOpenAi().chat.completions.create({...completion_payload, stream: true});
+		const stream = await this.getOpenAi().chat.completions.create({...completion_payload, stream: true, stream_options: {include_usage: true}});
 
-		let fullText = '';
+		let fullText = '', usage = null;
 		const toolBuffer = new Map();
 
 		for await (const chunk of stream) {
+			// The usage chunk arrives last with empty choices — grab it before the delta guard.
+			if (chunk.usage)
+				usage = chunk.usage;
+
 			const delta = chunk.choices?.[0]?.delta;
 			if (!delta)
 				continue;
@@ -111,6 +115,9 @@ export default class LegacyOpenAIModel extends Model {
 			toolCalls.push(tc);
 			yield {type: 'tool_call', content: tc};
 		}
+
+		if (usage)
+			yield this.usageDelta(usage.prompt_tokens, usage.completion_tokens, usage.prompt_tokens_details?.cached_tokens ?? usage.prompt_cache_hit_tokens);
 
 		const message_content = [];
 		if (fullText)

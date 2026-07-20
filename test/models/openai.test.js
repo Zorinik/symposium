@@ -138,6 +138,30 @@ test('OpenAIModel emits reasoning_delta and final reasoning block', async () => 
 	assert.deepEqual(value[0].content[1], {type: 'text', content: 'done'});
 });
 
+test('OpenAIModel yields a normalized usage delta from the final response', async () => {
+	const m = new OpenAIModel();
+	const stream = openAiResponsesStream(
+		[{type: 'response.output_text.delta', delta: 'Hi'}],
+		{
+			output: [{type: 'message', content: [{text: 'Hi'}]}],
+			usage: {
+				input_tokens: 1200,
+				input_tokens_details: {cached_tokens: 1000},
+				output_tokens: 40,
+				total_tokens: 1240,
+			},
+		},
+	);
+	installFakeOpenAi(m, stream);
+
+	const {deltas} = await drain(m.generate(buildModelDef(), fakeThread()));
+
+	assert.deepEqual(deltas[deltas.length - 1], {
+		type: 'usage',
+		content: {input: 1200, output: 40, cached: 1000, context: 1240},
+	});
+});
+
 test('OpenAIModel emits image delta and final image block', async () => {
 	const m = new OpenAIModel();
 	const imageItem = {

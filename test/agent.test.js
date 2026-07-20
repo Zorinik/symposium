@@ -84,6 +84,32 @@ test('Agent.generateCompletion forwards text_delta as chunks and returns Message
 	assert.deepEqual(value[0].content, [{type: 'text', content: 'Hello world'}]);
 });
 
+test('Agent.generateCompletion forwards usage deltas and stamps thread.state.usage', async () => {
+	const label = 'fake-gen-usage';
+	const usage = {input: 550, output: 30, cached: 400, context: 580};
+	await Symposium.loadModel(new ScriptedModel(label, [{
+		deltas: [
+			{type: 'text_delta', content: 'Hi'},
+			{type: 'usage', content: usage},
+		],
+		messages: [new Message('assistant', [{type: 'text', content: 'Hi'}])],
+	}]));
+
+	const agent = new Agent();
+	agent.default_model = label;
+	await agent.init();
+
+	const thread = await makeThread(agent, label);
+
+	const {deltas} = await drain(agent.generateCompletion(thread));
+
+	assert.deepEqual(deltas, [
+		{type: 'chunk', content: 'Hi'},
+		{type: 'usage', content: usage},
+	]);
+	assert.deepEqual(thread.state.usage, usage);
+});
+
 // ────────────────────────────────────────────────────────────────────────────────
 // Chat happy path
 // ────────────────────────────────────────────────────────────────────────────────

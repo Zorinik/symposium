@@ -85,3 +85,45 @@ test('LegacyOpenAIModel combines text + tool_calls in one Message', async () => 
 	assert.equal(value[0].content[1].type, 'tool_call');
 	assert.equal(value[0].content[1].content[0].name, 'f');
 });
+
+test('LegacyOpenAIModel requests include_usage and yields a normalized usage delta', async () => {
+	const m = new LegacyOpenAIModel();
+	let capturedPayload = null;
+	m.getOpenAi = () => ({
+		chat: {
+			completions: {
+				async create(payload) {
+					capturedPayload = payload;
+					return asyncIterable([
+						{choices: [{delta: {content: 'Hi'}}]},
+						{choices: [{delta: {}, finish_reason: 'stop'}]},
+						{choices: [], usage: {prompt_tokens: 500, completion_tokens: 25, prompt_tokens_details: {cached_tokens: 300}}},
+					]);
+				},
+			},
+		},
+	});
+
+	const {deltas} = await drain(m.generate(buildModelDef(), fakeThread()));
+
+	assert.deepEqual(capturedPayload.stream_options, {include_usage: true});
+	assert.deepEqual(deltas[deltas.length - 1], {
+		type: 'usage',
+		content: {input: 500, output: 25, cached: 300, context: 525},
+	});
+});
+
+test('LegacyOpenAIModel maps DeepSeek prompt_cache_hit_tokens to cached', async () => {
+	const m = new LegacyOpenAIModel();
+	installFakeOpenAi(m, [
+		{choices: [{delta: {content: 'Hi'}}]},
+		{choices: [], usage: {prompt_tokens: 500, completion_tokens: 25, prompt_cache_hit_tokens: 200}},
+	]);
+
+	const {deltas} = await drain(m.generate(buildModelDef(), fakeThread()));
+
+	assert.deepEqual(deltas[deltas.length - 1], {
+		type: 'usage',
+		content: {input: 500, output: 25, cached: 200, context: 525},
+	});
+});

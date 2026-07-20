@@ -7,26 +7,31 @@ export default class GrokModel extends OpenAIModel {
 			['grok-4-1-fast-reasoning', {
 				name: 'grok-4-1-fast-reasoning',
 				tokens: 2000000,
+				reasoning: true,
 				tools: true,
 			}],
 			['grok-4-1-fast-non-reasoning', {
 				name: 'grok-4-1-fast-non-reasoning',
 				tokens: 2000000,
+				reasoning: true,
 				tools: true,
 			}],
 			['grok-4-20-fast-reasoning', {
 				name: 'grok-4.20-beta-0309-reasoning',
 				tokens: 2000000,
+				reasoning: true,
 				tools: true,
 			}],
 			['grok-4-20-fast-non-reasoning', {
 				name: 'grok-4.20-beta-0309-non-reasoning',
 				tokens: 2000000,
+				reasoning: true,
 				tools: true,
 			}],
 			['grok-4.5', {
 				name: 'grok-4.5',
 				tokens: 5000000,
+				reasoning: true,
 				tools: true,
 			}],
 		]);
@@ -43,7 +48,7 @@ export default class GrokModel extends OpenAIModel {
 		return this.openai;
 	}
 
-	async generate(model, thread, tools = [], options = {}) {
+	async *generate(model, thread, tools = [], options = {}) {
 		if (options.image_generation) {
 			tools.push({
 				name: 'generate_image',
@@ -61,7 +66,7 @@ export default class GrokModel extends OpenAIModel {
 			});
 		}
 
-		const response = await super.generate(model, thread, tools, options);
+		const response = yield* super.generate(model, thread, tools, options);
 
 		// Check for image generation response
 		if (options.image_generation) {

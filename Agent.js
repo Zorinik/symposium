@@ -672,8 +672,14 @@ ${context_string}
 			let step = await it.next();
 			while (!step.done) {
 				const delta = step.value;
-				if (delta && delta.type === 'text_delta')
+				if (delta && delta.type === 'text_delta') {
 					yield {type: 'chunk', content: delta.content};
+				} else if (delta && delta.type === 'usage') {
+					// Last reported usage rides on thread state too, so it survives
+					// storeState and is readable at turn_end / after a reload.
+					thread.state.usage = delta.content;
+					yield {type: 'usage', content: delta.content};
+				}
 				step = await it.next();
 			}
 			messages = step.value;

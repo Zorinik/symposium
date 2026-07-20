@@ -161,6 +161,7 @@ All events yielded from the generator:
 | `tool_response` | `{id, name, toolkit, success, response?, error?}` | Emitted after the tool returns or throws. `id` matches the `tool` event's id; `name` is the tool name; `toolkit` is the owning toolkit's name. |
 | `tools_auth` | `{id, tools}` | Yielded when authorization is required — see below. |
 | `retry` | `{attempt, reason}` | Only when an error occurs *after* at least one chunk has already streamed for the current turn. |
+| `usage` | `{content: {input, output, cached, context}}` | Token usage reported by the provider after each LLM call (one per call, so several per turn when tools run). `input` is the full prompt size (cache included), `cached` the portion served from cache, `context` = `input + output` — the tokens occupying the model context after the call. Also stored on `thread.state.usage` (last call wins), so it survives persistence and is readable at `turn_end`. Omitted when the provider does not report usage. |
 | `result` | `{value}` | Only when `response_schema` is set — parsed structured answer. |
 | `turn_end` | `{thread}` | After each completed turn (LLM done with no more tool calls). Fires per-turn whether the run continues or ends — use it (not `end`) to detect turn boundaries inside a streaming run. |
 | `end` | `{thread}` | Always yielded last, even on throw. |

@@ -19,6 +19,7 @@ export default class OpenAIModel extends Model {
 				name: 'gpt-5',
 				tiktoken: 'gpt-4',
 				tokens: 400000,
+				reasoning: true,
 				tools: true,
 				structured_output: true,
 				audio: true,
@@ -28,6 +29,7 @@ export default class OpenAIModel extends Model {
 				name: 'gpt-5-mini',
 				tiktoken: 'gpt-4',
 				tokens: 400000,
+				reasoning: true,
 				tools: true,
 				structured_output: true,
 			}],
@@ -35,6 +37,7 @@ export default class OpenAIModel extends Model {
 				name: 'gpt-5.1',
 				tiktoken: 'gpt-4',
 				tokens: 400000,
+				reasoning: true,
 				tools: true,
 				structured_output: true,
 				audio: true,
@@ -44,6 +47,7 @@ export default class OpenAIModel extends Model {
 				name: 'gpt-5.2',
 				tiktoken: 'gpt-4',
 				tokens: 400000,
+				reasoning: true,
 				tools: true,
 				structured_output: true,
 				audio: true,
@@ -53,6 +57,7 @@ export default class OpenAIModel extends Model {
 				name: 'gpt-5.2-codex',
 				tiktoken: 'gpt-4',
 				tokens: 400000,
+				reasoning: true,
 				tools: true,
 				structured_output: true,
 				audio: false,
@@ -62,6 +67,7 @@ export default class OpenAIModel extends Model {
 				name: 'gpt-5.4',
 				tiktoken: 'gpt-4',
 				tokens: 1000000,
+				reasoning: true,
 				tools: true,
 				structured_output: true,
 				audio: false,
@@ -71,6 +77,7 @@ export default class OpenAIModel extends Model {
 				name: 'gpt-5.5',
 				tiktoken: 'gpt-5',
 				tokens: 1000000,
+				reasoning: true,
 				tools: true,
 				structured_output: true,
 				audio: false,
@@ -80,6 +87,7 @@ export default class OpenAIModel extends Model {
 				name: 'gpt-5.6-luna',
 				tiktoken: 'gpt-5',
 				tokens: 1000000,
+				reasoning: true,
 				tools: true,
 				structured_output: true,
 				audio: false,
@@ -89,6 +97,7 @@ export default class OpenAIModel extends Model {
 				name: 'gpt-5.6-terra',
 				tiktoken: 'gpt-5',
 				tokens: 1000000,
+				reasoning: true,
 				tools: true,
 				structured_output: true,
 				audio: false,
@@ -98,6 +107,7 @@ export default class OpenAIModel extends Model {
 				name: 'gpt-5.6-sol',
 				tiktoken: 'gpt-5',
 				tokens: 1000000,
+				reasoning: true,
 				tools: true,
 				structured_output: true,
 				audio: false,
@@ -156,12 +166,16 @@ export default class OpenAIModel extends Model {
 			model: model.name,
 			input: convertedMessages,
 			store: false,
-			include: ['reasoning.encrypted_content'],
 			tools: apiTools,
-			reasoning: {
-				summary: 'auto',
-			},
 		};
+
+		// Reasoning options are rejected by non-reasoning models (e.g. gpt-4o)
+		if (model.reasoning) {
+			completion_payload.include = ['reasoning.encrypted_content'];
+			completion_payload.reasoning = {
+				summary: 'auto',
+			};
+		}
 
 		if (options.force_tool) {
 			completion_payload.tool_choice = {
@@ -222,6 +236,9 @@ export default class OpenAIModel extends Model {
 		}
 
 		const completion = await stream.finalResponse();
+
+		if (completion.usage)
+			yield this.usageDelta(completion.usage.input_tokens, completion.usage.output_tokens, completion.usage.input_tokens_details?.cached_tokens);
 
 		const message_content = [];
 		for (let output of completion.output) {

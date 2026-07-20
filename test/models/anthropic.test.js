@@ -98,6 +98,35 @@ test('AnthropicModel buffers input_json_delta and yields a complete tool_call', 
 	]);
 });
 
+test('AnthropicModel yields a normalized usage delta folding cache tokens into input', async () => {
+	const m = new AnthropicModel();
+	const finalMessage = {
+		content: [{type: 'text', text: 'Hi'}],
+		usage: {
+			input_tokens: 100,
+			cache_read_input_tokens: 400,
+			cache_creation_input_tokens: 50,
+			output_tokens: 30,
+		},
+	};
+	const stream = anthropicMessagesStream(
+		[
+			{type: 'content_block_start', index: 0, content_block: {type: 'text'}},
+			{type: 'content_block_delta', index: 0, delta: {type: 'text_delta', text: 'Hi'}},
+			{type: 'content_block_stop', index: 0},
+		],
+		finalMessage,
+	);
+	installFakeAnthropic(m, stream);
+
+	const {deltas} = await drain(m.generate(buildModelDef(), fakeThread()));
+
+	assert.deepEqual(deltas[deltas.length - 1], {
+		type: 'usage',
+		content: {input: 550, output: 30, cached: 400, context: 580},
+	});
+});
+
 test('AnthropicModel emits reasoning_delta from thinking_delta', async () => {
 	const m = new AnthropicModel();
 	const thinkingBlock = {type: 'thinking', thinking: 'reasoning text'};

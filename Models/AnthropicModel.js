@@ -153,6 +153,14 @@ export default class AnthropicModel extends Model {
 
 			const message = await stream.finalMessage();
 
+			if (message.usage) {
+				// Anthropic reports cached tokens OUTSIDE input_tokens: the real
+				// prompt size is input + cache reads + cache writes.
+				const cached = message.usage.cache_read_input_tokens || 0;
+				const input = (message.usage.input_tokens || 0) + cached + (message.usage.cache_creation_input_tokens || 0);
+				yield this.usageDelta(input, message.usage.output_tokens, cached);
+			}
+
 			const message_content = [];
 			if (message.content) {
 				for (let m of message.content) {

@@ -69,3 +69,18 @@ test('GroqModel accumulates tool_call deltas across chunks', async () => {
 		},
 	]);
 });
+
+test('GroqModel yields a normalized usage delta from the x_groq final chunk', async () => {
+	const m = new GroqModel();
+	installFakeGroq(m, [
+		{choices: [{delta: {content: 'Hi'}}]},
+		{choices: [{delta: {}, finish_reason: 'stop'}], x_groq: {usage: {prompt_tokens: 80, completion_tokens: 20}}},
+	]);
+
+	const {deltas} = await drain(m.generate(buildModelDef(), fakeThread()));
+
+	assert.deepEqual(deltas[deltas.length - 1], {
+		type: 'usage',
+		content: {input: 80, output: 20, cached: 0, context: 100},
+	});
+});

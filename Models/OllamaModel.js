@@ -90,9 +90,14 @@ export default class OllamaModel extends Model {
 
 		let fullText = '';
 		let fullThinking = '';
+		let usage = null;
 		const toolCalls = [];
 
 		for await (const chunk of stream) {
+			// The final done chunk carries the token counts — grab them before the message guard.
+			if (chunk.prompt_eval_count != null || chunk.eval_count != null)
+				usage = {input: chunk.prompt_eval_count, output: chunk.eval_count};
+
 			const m = chunk.message;
 			if (!m)
 				continue;
@@ -121,6 +126,9 @@ export default class OllamaModel extends Model {
 				}
 			}
 		}
+
+		if (usage)
+			yield this.usageDelta(usage.input, usage.output);
 
 		const message_content = [];
 		if (fullThinking)

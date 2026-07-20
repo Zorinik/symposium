@@ -15,7 +15,20 @@ export default class Model {
 		//   {type: 'reasoning_delta', content: string}
 		//   {type: 'tool_call',       content: {id?, name, arguments}}
 		//   {type: 'image',           content: <image-block-content>, meta}
+		//   {type: 'usage',           content: {input, output, cached, context}}
+		// The usage delta is yielded once at end of stream (via usageDelta()),
+		// only when the provider reported token usage for the call.
 		return null;
+	}
+
+	// Normalized token usage for one LLM call. `input` is the full prompt size
+	// (cache included), `cached` the portion of it served from cache, `context`
+	// the tokens occupying the model context after the call (input + output).
+	usageDelta(input, output, cached = 0) {
+		input = input || 0;
+		output = output || 0;
+		cached = cached || 0;
+		return {type: 'usage', content: {input, output, cached, context: input + output}};
 	}
 
 	async countTokens(thread) {

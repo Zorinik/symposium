@@ -79,10 +79,14 @@ export default class GroqModel extends Model {
 
 		const stream = await this.getGroq().chat.completions.create({...completion_payload, stream: true});
 
-		let fullText = '';
+		let fullText = '', usage = null;
 		const toolBuffer = new Map();
 
 		for await (const chunk of stream) {
+			// Groq ships usage on the final chunk under x_groq — grab it before the delta guard.
+			if (chunk.x_groq?.usage || chunk.usage)
+				usage = chunk.x_groq?.usage || chunk.usage;
+
 			const delta = chunk.choices?.[0]?.delta;
 			if (!delta)
 				continue;
@@ -118,6 +122,9 @@ export default class GroqModel extends Model {
 			toolCalls.push(tc);
 			yield {type: 'tool_call', content: tc};
 		}
+
+		if (usage)
+			yield this.usageDelta(usage.prompt_tokens, usage.completion_tokens, usage.prompt_tokens_details?.cached_tokens);
 
 		const message_content = [];
 		if (fullText)
