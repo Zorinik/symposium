@@ -54,12 +54,14 @@ A `Thread` owns the message history and a free-form `state` object (which always
 
 `thread.unique` (`<agent_name>-<id>`) is the storage key — never reuse the same thread id across agents with different names without realizing they share namespace.
 
-### Context system (`Context.js`, `Contexts/*.js`, `ContextHandler.js`, `Summarizer.js`, `GetContextToolkit.js`)
+### Context system (`Context.js`, `Contexts/*.js`, `ContextHandler.js`, `Summarizer.js`, `Scrubber.js`, `GetContextToolkit.js`)
 
 Two distinct concepts share the word "context":
 
 1. **`Context` / `Contexts/*`** — static reference material attached to an agent via `agent.addContext(text_or_context, {type: 'always' | 'on_request'})`. `always` contexts are inlined into the system message at thread init; `on_request` contexts are advertised by title/description and fetched lazily through the auto-injected `GetContextToolkit`. Mixing both is supported.
-2. **`ContextHandler`** — pre-execute hook (set as `options.memory_handler` on the agent) that can transform the thread before each LLM call. `Summarizer` extends this: when token count crosses `threshold * model.tokens`, it summarizes earlier messages down to `summary_length * model.tokens`, preserving the system prompt.
+2. **`ContextHandler`** — pre-execute hook (set as `options.memory_handler` on the agent) that can transform the thread before each LLM call. Since 3.4 `beforeExecute` runs inside the `execute()` turn loop, so the handler fires before **every** LLM call — including every later turn of a streaming run (previously it ran once per `execute()`, i.e. once per session in streaming mode). If the handler returns a different object than it was given (a transformed clone, as `Summarizer` does), `beforeExecute` re-registers it in `agent.threads`, so `getThread()` and storage stay coherent. Two shipped handlers:
+	- `Summarizer` — when token count crosses `threshold * model.tokens`, it summarizes earlier messages down to `summary_length * model.tokens`, preserving the system prompt. Returns a clone.
+	- `Scrubber` — surgical auto-forget: in messages older than the last `keep_last` (default 3) user messages, replaces `image`/`audio` blocks with short text stubs (carrying the block's optional `content.path` so the model can re-read the file, and the audio transcription when present) and trims `text` (user role only) / `tool_result` contents longer than `max_text_length` chars down to `keep_chars` + a marker. Mutates in place (no clone), never touches `system` messages, keeps tool_call/tool_result pairing intact, idempotent. The persisted thread is scrubbed too — this is deliberate destructive forgetting, whose point is freeing context permanently. Note the prompt-cache tradeoff: each scrub invalidates the provider prefix cache from the edit point, so it trades a one-time cache re-write for permanent window headroom.
 
 ### MCP servers (`MCPServer.js`, `Contexts/MCPResource.js`)
 

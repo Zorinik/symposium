@@ -489,14 +489,20 @@ ${context_string}
 	}
 
 	async beforeExecute(thread) {
-		if (this.options.memory_handler)
-			thread = await this.options.memory_handler.handle(thread);
+		if (this.options.memory_handler) {
+			const handled = await this.options.memory_handler.handle(thread);
+			if (handled && handled !== thread) {
+				// The handler returned a transformed clone (e.g. Summarizer):
+				// re-register it so getThread() doesn't keep serving the stale
+				// original while storage holds the transformed version.
+				thread = handled;
+				this.threads.set(thread.id, thread);
+			}
+		}
 		return thread;
 	}
 
 	async *execute(thread) {
-		thread = await this.beforeExecute(thread);
-
 		const model = Symposium.getModel(thread.state.model);
 
 		const completion_options = {};
@@ -549,6 +555,12 @@ ${context_string}
 				if (streamingState.controlFlags.cancelled)
 					return;
 			}
+
+			// Per-iteration, not once per run: in streaming mode a single
+			// execute() spans the whole session, and the memory handler
+			// (Summarizer, Scrubber) must get a chance before every LLM call,
+			// not just the first one.
+			thread = await this.beforeExecute(thread);
 
 			try {
 				// Inline drain of generateCompletion so we can observe `chunk`

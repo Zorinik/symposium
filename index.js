@@ -8,6 +8,7 @@ import Logger from "./Logger.js";
 
 import ContextHandler from "./ContextHandler.js";
 import Summarizer from "./Summarizer.js";
+import Scrubber from "./Scrubber.js";
 
 import Context from "./Context.js";
 import File from "./Contexts/File.js";
@@ -26,6 +27,7 @@ export {
 	Logger,
 	ContextHandler,
 	Summarizer,
+	Scrubber,
 	Context,
 	File,
 	Text,

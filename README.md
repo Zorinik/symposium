@@ -42,7 +42,7 @@ Symposium uses environment variables to configure access to various services. Yo
 -	**`Thread`**: A single conversation with an agent. Maintains message history and per-conversation state.
 -	**`Toolkit`**: Base class for toolkits — groupings of one or more tools that an `Agent` can call.
 -	**`Message`**: A typed message inside a `Thread`.
--	**`ContextHandler`** / **`Summarizer`**: Pre-execute hooks for managing long-context strategies.
+-	**`ContextHandler`** / **`Summarizer`** / **`Scrubber`**: Pre-execute hooks for managing long-context strategies.
 -	**`createInputChannel`**: Helper that creates an `AsyncIterable` with `send(item)` / `close()` for streaming input into an agent.
 
 ## Getting Started
@@ -453,8 +453,9 @@ Returns `{ send(item), close(), [Symbol.asyncIterator]() }`. Push strings, conte
 
 ### Other Classes
 
--	**`ContextHandler`**: Base for managing long-term context.
+-	**`ContextHandler`**: Base for managing long-term context. Set as `options.memory_handler` on the agent; since 3.4 it runs before **every** LLM call (previously once per run, which skipped every later turn of a streaming session). A handler returning a transformed clone is re-registered in the agent's thread cache.
 -	**`Summarizer`**: Utility agent that compresses old messages once a thread crosses a token threshold.
+-	**`Scrubber`**: Surgical auto-forget of heavy content: replaces images/audio blocks and trims oversized texts and tool results in messages older than the last `keep_last` user turns, leaving short text stubs (mentioning the on-disk `path` when the block carries one, so an agent with filesystem tools can re-read the original). Mutates the thread in place so the scrub persists with it; message structure and tool pairing stay intact; system messages are never touched. Options: `keep_last` (3), `max_text_length` (20000 chars), `keep_chars` (1000), plus `images`/`audio`/`texts`/`tool_results` toggles.
 -	**`Logger`**: Simple per-agent logger.
 
 ## License
