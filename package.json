@@ -1,7 +1,7 @@
 {
 	"type": "module",
 	"name": "symposium",
-	"version": "3.4.0",
+	"version": "3.5.0",
 	"description": "Agents",
 	"main": "index.js",
 	"author": "Domenico Giambra",
@@ -10,7 +10,7 @@
 		"test": "node --test \"test/**/*.test.js\""
 	},
 	"dependencies": {
-		"@anthropic-ai/sdk": "^0.110.0",
+		"@anthropic-ai/sdk": "^0.115.0",
 		"@modelcontextprotocol/sdk": "^1.29.0",
 		"groq-sdk": "^1.0.0",
 		"ollama": "^0.6.0",
