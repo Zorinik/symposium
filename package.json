@@ -1,7 +1,7 @@
 {
 	"type": "module",
 	"name": "symposium",
-	"version": "3.5.0",
+	"version": "3.5.1",
 	"description": "Agents",
 	"main": "index.js",
 	"author": "Domenico Giambra",
@@ -14,7 +14,7 @@
 		"@modelcontextprotocol/sdk": "^1.29.0",
 		"groq-sdk": "^1.0.0",
 		"ollama": "^0.6.0",
-		"openai": "^6.0.0",
+		"openai": "^7.0.0",
 		"tiktoken": "^1.0.10",
 		"uuid": "^14.0.0"
 	}
