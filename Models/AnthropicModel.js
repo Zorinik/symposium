@@ -57,6 +57,11 @@ export default class AnthropicModel extends Model {
 				tokens: 1000000,
 				tools: true,
 			}],
+			['claude-5-1-fable', {
+				name: 'claude-fable-5-1',
+				tokens: 1000000,
+				tools: true,
+			}],
 		]);
 	}
 

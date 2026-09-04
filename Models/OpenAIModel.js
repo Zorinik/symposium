@@ -113,6 +113,16 @@ export default class OpenAIModel extends Model {
 				audio: false,
 				image_generation: false,
 			}],
+			['gpt-6-astra', {
+				name: 'gpt-6-astra',
+				tiktoken: 'gpt-5',
+				tokens: 1000000,
+				reasoning: true,
+				tools: true,
+				structured_output: true,
+				audio: false,
+				image_generation: false,
+			}],
 		]);
 	}
 
