@@ -134,7 +134,7 @@ test('chat agent.message() yields start → chunk* → output → end', async ()
 		events.push(ev);
 
 	const types = events.map(e => e.type);
-	assert.deepEqual(types, ['start', 'chunk', 'chunk', 'output', 'end']);
+	assert.deepEqual(types, ['start', 'chunk', 'chunk', 'output', 'turn_end', 'end']);
 	assert.equal(events[1].content, 'Hi');
 	assert.equal(events[2].content, ' there');
 	assert.deepEqual(events[3].content, {type: 'text', content: 'Hi there'});
@@ -180,7 +180,7 @@ test('chat agent runs a tool then yields tool/tool_response/output', async () =>
 		events.push(ev);
 
 	const types = events.map(e => e.type);
-	assert.deepEqual(types, ['start', 'tool', 'tool_response', 'chunk', 'output', 'end']);
+	assert.deepEqual(types, ['start', 'tool', 'tool_response', 'chunk', 'output', 'turn_end', 'end']);
 
 	const toolEv = events[1];
 	assert.equal(toolEv.name, 'echo');
@@ -432,7 +432,7 @@ test('tools_auth suspends until {type:"auth", decision:"approve"} resumes the ru
 	}
 
 	const types = events.map(e => e.type);
-	assert.deepEqual(types, ['start', 'tools_auth', 'tool', 'tool_response', 'chunk', 'output', 'end']);
+	assert.deepEqual(types, ['start', 'tools_auth', 'tool', 'tool_response', 'chunk', 'output', 'turn_end', 'end']);
 	assert.ok(events[1].id);
 	assert.equal(events[1].tools[0].name, 'sensitive');
 });
@@ -482,7 +482,7 @@ test('{type:"auth", decision:"reject"} drops the tool call and ends the run', as
 	}
 
 	const types = events.map(e => e.type);
-	assert.deepEqual(types, ['start', 'tools_auth', 'end']);
+	assert.deepEqual(types, ['start', 'tools_auth', 'turn_end', 'end']);
 	assert.equal(guarded.called, 0);
 });
 
@@ -530,7 +530,7 @@ test('input channel closing without auth response rejects and cancels', async ()
 	}
 
 	const types = events.map(e => e.type);
-	assert.deepEqual(types, ['start', 'tools_auth', 'end']);
+	assert.deepEqual(types, ['start', 'tools_auth', 'turn_end', 'end']);
 	assert.equal(tool.called, 0);
 });
 
@@ -560,7 +560,7 @@ test('streaming input — channel.send(string) + close() runs one turn like a pl
 		events.push(ev);
 
 	const types = events.map(e => e.type);
-	assert.deepEqual(types, ['start', 'chunk', 'output', 'end']);
+	assert.deepEqual(types, ['start', 'chunk', 'output', 'turn_end', 'end']);
 	assert.equal(events[1].content, 'Hi');
 });
 
@@ -604,7 +604,7 @@ test('streaming input — second message after first turn triggers another turn'
 	}
 
 	const types = events.map(e => e.type);
-	assert.deepEqual(types, ['start', 'chunk', 'output', 'chunk', 'output', 'end']);
+	assert.deepEqual(types, ['start', 'chunk', 'output', 'turn_end', 'chunk', 'output', 'turn_end', 'end']);
 	const outputs = events.filter(e => e.type === 'output').map(e => e.content.content);
 	assert.deepEqual(outputs, ['First', 'Second']);
 });
@@ -684,7 +684,7 @@ test('streaming input — cancel ends the loop gracefully without starting anoth
 	}
 
 	const types = events.map(e => e.type);
-	assert.deepEqual(types, ['start', 'chunk', 'output', 'end']);
+	assert.deepEqual(types, ['start', 'chunk', 'output', 'turn_end', 'end']);
 	assert.equal(model.calls, 1);
 });
 
@@ -706,7 +706,7 @@ test('plain ContentBlock[] input continues to work', async () => {
 		events.push(ev);
 
 	const types = events.map(e => e.type);
-	assert.deepEqual(types, ['start', 'chunk', 'output', 'end']);
+	assert.deepEqual(types, ['start', 'chunk', 'output', 'turn_end', 'end']);
 });
 
 // ────────────────────────────────────────────────────────────────────────────────
@@ -734,7 +734,7 @@ test('retry is silent when error occurs before any chunk is yielded', async () =
 		events.push(ev);
 
 	const types = events.map(e => e.type);
-	assert.deepEqual(types, ['start', 'chunk', 'output', 'end']);
+	assert.deepEqual(types, ['start', 'chunk', 'output', 'turn_end', 'end']);
 	assert.equal(events.find(e => e.type === 'retry'), undefined);
 });
 
@@ -765,7 +765,7 @@ test('retry event is yielded when error occurs after a chunk', async () => {
 		events.push(ev);
 
 	const types = events.map(e => e.type);
-	assert.deepEqual(types, ['start', 'chunk', 'retry', 'chunk', 'output', 'end']);
+	assert.deepEqual(types, ['start', 'chunk', 'retry', 'chunk', 'output', 'turn_end', 'end']);
 	const retryEv = events.find(e => e.type === 'retry');
 	assert.equal(retryEv.attempt, 1);
 	assert.equal(retryEv.reason, 'mid-stream blew up');
