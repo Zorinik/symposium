@@ -133,6 +133,16 @@ export default class OpenAIModel extends Model {
 				audio: false,
 				image_generation: false,
 			}],
+			['gpt-6.1-terra', {
+				name: 'gpt-6.1-terra',
+				tiktoken: 'gpt-5',
+				tokens: 1000000,
+				reasoning: true,
+				tools: true,
+				structured_output: true,
+				audio: false,
+				image_generation: false,
+			}],
 		]);
 	}
 
