@@ -40,6 +40,12 @@ export default class GrokModel extends OpenAIModel {
 				reasoning: true,
 				tools: true,
 			}],
+			['grok-4.7', {
+				name: 'grok-4.7',
+				tokens: 5000000,
+				reasoning: true,
+				tools: true,
+			}],
 		]);
 	}
 

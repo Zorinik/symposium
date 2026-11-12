@@ -162,3 +162,55 @@ test('AnthropicModel emits reasoning_delta from thinking_delta', async () => {
 	});
 	assert.deepEqual(value[0].content[1], {type: 'text', content: 'done'});
 });
+
+function captureAnthropicPayload(modelInstance, stream) {
+	const captured = {};
+	modelInstance.getAnthropic = () => ({
+		beta: {
+			messages: {
+				stream(payload) {
+					captured.payload = payload;
+					return stream;
+				},
+			},
+		},
+	});
+	return captured;
+}
+
+test('AnthropicModel uses adaptive thinking, refusal fallback and prompt-steered tool use on adaptive_thinking models', async () => {
+	const m = new AnthropicModel();
+	const stream = anthropicMessagesStream(
+		[
+			{type: 'content_block_start', index: 0, content_block: {type: 'text'}},
+			{type: 'content_block_delta', index: 0, delta: {type: 'text_delta', text: 'ok'}},
+			{type: 'content_block_stop', index: 0},
+		],
+		{content: [{type: 'fallback', from: {model: 'a'}, to: {model: 'b'}}, {type: 'text', text: 'ok'}]},
+	);
+	const captured = captureAnthropicPayload(m, stream);
+
+	const tools = [{name: 'response', description: 'final answer', parameters: {type: 'object', properties: {}}}];
+	const {value} = await drain(m.generate(
+		buildModelDef({name: 'claude-fable-5-2', adaptive_thinking: true, refusal_fallback: true}),
+		fakeThread(),
+		tools,
+		{force_tool: 'response'},
+	));
+
+	const p = captured.payload;
+	assert.deepEqual(p.thinking, {type: 'adaptive', display: 'summarized'});
+	assert.deepEqual(p.betas, ['server-side-fallback-2026-07-01']);
+	assert.equal(p.fallbacks, 'default');
+	assert.deepEqual(p.tool_choice, {type: 'auto'});
+	assert.match(p.system, /`response` tool/);
+	assert.deepEqual(value[0].content, [{type: 'text', content: 'ok'}]);
+});
+
+test('AnthropicModel throws on a refusal stop reason', async () => {
+	const m = new AnthropicModel();
+	const stream = anthropicMessagesStream([], {content: [], stop_reason: 'refusal', stop_details: {category: 'cyber'}});
+	installFakeAnthropic(m, stream);
+
+	await assert.rejects(drain(m.generate(buildModelDef(), fakeThread())), /refused.*cyber/);
+});

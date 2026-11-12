@@ -6,7 +6,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "node \"C:/Users/zorin/.octavius/hooks/claude-status-hook.mjs\"",
+						"command": "node \"C:/Users/zorin/.octavius/hooks/octavius-status-hook.mjs\"",
 						"async": true
 					}
 				]
@@ -14,12 +14,20 @@
 		],
 		"UserPromptSubmit": [
 			{
-				"matcher": "*",
 				"hooks": [
 					{
 						"type": "command",
-						"command": "node \"C:/Users/zorin/.octavius/hooks/claude-status-hook.mjs\"",
+						"command": "node \"C:/Users/zorin/.octavius/hooks/octavius-status-hook.mjs\"",
 						"async": true
+					}
+				]
+			},
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node \"C:/Users/zorin/.octavius/hooks/octavius-status-hook.mjs\" peers",
+						"timeout": 5
 					}
 				]
 			}
@@ -30,7 +38,31 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "node \"C:/Users/zorin/.octavius/hooks/claude-status-hook.mjs\"",
+						"command": "node \"C:/Users/zorin/.octavius/hooks/octavius-status-hook.mjs\"",
+						"async": true
+					}
+				]
+			}
+		],
+		"PermissionRequest": [
+			{
+				"matcher": "*",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node \"C:/Users/zorin/.octavius/hooks/octavius-status-hook.mjs\"",
+						"async": true
+					}
+				]
+			}
+		],
+		"PostToolUse": [
+			{
+				"matcher": "*",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node \"C:/Users/zorin/.octavius/hooks/octavius-status-hook.mjs\"",
 						"async": true
 					}
 				]
@@ -38,11 +70,75 @@
 		],
 		"Notification": [
 			{
+				"matcher": "permission_prompt",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node \"C:/Users/zorin/.octavius/hooks/octavius-status-hook.mjs\"",
+						"async": true
+					}
+				]
+			},
+			{
+				"matcher": "elicitation_dialog",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node \"C:/Users/zorin/.octavius/hooks/octavius-status-hook.mjs\"",
+						"async": true
+					}
+				]
+			},
+			{
+				"matcher": "idle_prompt",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node \"C:/Users/zorin/.octavius/hooks/octavius-status-hook.mjs\"",
+						"async": true
+					}
+				]
+			},
+			{
+				"matcher": "agent_needs_input",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node \"C:/Users/zorin/.octavius/hooks/octavius-status-hook.mjs\"",
+						"async": true
+					}
+				]
+			},
+			{
+				"matcher": "agent_completed",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node \"C:/Users/zorin/.octavius/hooks/octavius-status-hook.mjs\"",
+						"async": true
+					}
+				]
+			}
+		],
+		"SubagentStart": [
+			{
 				"matcher": "*",
 				"hooks": [
 					{
 						"type": "command",
-						"command": "node \"C:/Users/zorin/.octavius/hooks/claude-status-hook.mjs\"",
+						"command": "node \"C:/Users/zorin/.octavius/hooks/octavius-status-hook.mjs\"",
+						"async": true
+					}
+				]
+			}
+		],
+		"SubagentStop": [
+			{
+				"matcher": "*",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node \"C:/Users/zorin/.octavius/hooks/octavius-status-hook.mjs\"",
 						"async": true
 					}
 				]
@@ -50,11 +146,10 @@
 		],
 		"Stop": [
 			{
-				"matcher": "*",
 				"hooks": [
 					{
 						"type": "command",
-						"command": "node \"C:/Users/zorin/.octavius/hooks/claude-status-hook.mjs\"",
+						"command": "node \"C:/Users/zorin/.octavius/hooks/octavius-status-hook.mjs\"",
 						"async": true
 					}
 				]
@@ -66,7 +161,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "node \"C:/Users/zorin/.octavius/hooks/claude-status-hook.mjs\"",
+						"command": "node \"C:/Users/zorin/.octavius/hooks/octavius-status-hook.mjs\"",
 						"async": true
 					}
 				]

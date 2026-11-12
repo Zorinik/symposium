@@ -67,6 +67,13 @@ export default class AnthropicModel extends Model {
 				tokens: 1000000,
 				tools: true,
 			}],
+			['claude-5-2-fable', {
+				name: 'claude-fable-5-2',
+				tokens: 1000000,
+				tools: true,
+				adaptive_thinking: true,
+				refusal_fallback: true,
+			}],
 		]);
 	}
 
@@ -110,15 +117,40 @@ export default class AnthropicModel extends Model {
 				})),
 			};
 
-			if (options.force_tool) {
-				completion_payload.tool_choice = {
-					type: 'tool',
-					name: options.force_tool,
+			if (model.adaptive_thinking) {
+				// Thinking is always on for these models: budget_tokens is rejected with a 400
+				completion_payload.max_tokens = 64000;
+				completion_payload.thinking = {
+					type: 'adaptive',
+					display: 'summarized',
 				};
-
-				delete completion_payload.thinking;
-				delete completion_payload.betas;
+				completion_payload.betas = [];
 			}
+
+			if (model.refusal_fallback) {
+				// On a safety refusal, the API re-runs the request on a fallback model picked by refusal category
+				completion_payload.betas.push('server-side-fallback-2026-07-01');
+				completion_payload.fallbacks = 'default';
+			}
+
+			if (options.force_tool) {
+				if (model.adaptive_thinking) {
+					// Forced tool_choice ("tool"/"any") is rejected with a 400 on these models: steer from the prompt instead
+					completion_payload.tool_choice = {type: 'auto'};
+					completion_payload.system = (system ? system + "\n\n" : '') + 'You must reply by calling the `' + options.force_tool + '` tool.';
+				} else {
+					completion_payload.tool_choice = {
+						type: 'tool',
+						name: options.force_tool,
+					};
+
+					delete completion_payload.thinking;
+					delete completion_payload.betas;
+				}
+			}
+
+			if (completion_payload.betas && !completion_payload.betas.length)
+				delete completion_payload.betas;
 
 			const stream = this.getAnthropic().beta.messages.stream(completion_payload);
 
@@ -168,6 +200,9 @@ export default class AnthropicModel extends Model {
 
 			const message = await stream.finalMessage();
 
+			if (message.stop_reason === 'refusal')
+				throw new Error('Anthropic model refused the request' + (message.stop_details?.category ? ' (' + message.stop_details.category + ')' : ''));
+
 			if (message.usage) {
 				// Anthropic reports cached tokens OUTSIDE input_tokens: the real
 				// prompt size is input + cache reads + cache writes.
@@ -203,6 +238,10 @@ export default class AnthropicModel extends Model {
 								content: m.thinking,
 								original: m,
 							});
+							break;
+
+						case 'fallback':
+							// Marks a server-side fallback switch point; carries no content
 							break;
 
 						default:
